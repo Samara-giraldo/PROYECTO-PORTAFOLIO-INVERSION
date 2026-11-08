@@ -29,26 +29,36 @@ html, body, [class*="css"] { font-family:'DM Sans',sans-serif; }
 .stApp { background:var(--bg); color:#17233D; }
 [data-testid="stHeader"] { background:rgba(243,246,251,.92); }
 .block-container { padding-top:1.5rem; padding-bottom:2.5rem; max-width:1500px; }
+
+/* Configuración de la barra lateral */
 section[data-testid="stSidebar"] { background:var(--navy); }
 section[data-testid="stSidebar"] * { color:#F5F7FC !important; }
-section[data-testid="stSidebar"] [data-baseweb="input"] input,
+
+/* FORZAR COLOR NEGRO/OSCURO EN LOS NÚMEROS DE LOS INPUTS DE LA BARRA LATERAL */
+section[data-testid="stSidebar"] input {
+    color: #0F172A !important;
+    -webkit-text-fill-color: #0F172A !important;
+}
+
 section[data-testid="stSidebar"] [data-baseweb="select"] > div {
- background:#223253 !important; color:#fff !important; border-color:#344566 !important; }
+    background:#223253 !important; color:#fff !important; border-color:#344566 !important; 
+}
+
 h1 { color:var(--navy); font-weight:800; letter-spacing:-1.2px; }
 h2,h3 { color:var(--navy); font-weight:700; }
 div[data-testid="stMetric"] {
- background:#fff; border:1px solid var(--line); border-radius:16px;
- padding:17px 18px; box-shadow:0 4px 18px rgba(22,39,71,.045);
+    background:#fff; border:1px solid var(--line); border-radius:16px;
+    padding:17px 18px; box-shadow:0 4px 18px rgba(22,39,71,.045);
 }
 div[data-testid="stMetricLabel"] { color:var(--muted); font-weight:600; }
 div[data-testid="stMetricValue"] { color:var(--navy); font-weight:800; }
 div[data-testid="stMetricDelta"] { font-weight:700; }
 div.stButton > button, div.stFormSubmitButton > button {
- background:var(--blue); color:#fff; border:0; border-radius:10px;
- padding:.55rem 1.05rem; font-weight:700; min-height:42px;
+    background:var(--blue); color:#fff; border:0; border-radius:10px;
+    padding:.55rem 1.05rem; font-weight:700; min-height:42px;
 }
 div.stButton > button:hover, div.stFormSubmitButton > button:hover {
- background:#1557D8; color:#fff; border:0;
+    background:#1557D8; color:#fff; border:0;
 }
 button[data-baseweb="tab"] { font-weight:700; color:#68758E; padding:14px 16px; }
 button[data-baseweb="tab"][aria-selected="true"] { color:var(--blue); }
@@ -59,20 +69,20 @@ div[data-testid="stExpander"] { background:#fff; border:1px solid var(--line); b
 div[data-testid="stAlert"] { border-radius:12px; }
 small, .muted { color:var(--muted); }
 .hero {
- background:linear-gradient(115deg,#101B35 0%,#1B3767 62%,#246BFD 100%);
- border-radius:20px; padding:26px 30px; color:white; margin-bottom:20px;
- box-shadow:0 10px 30px rgba(16,27,53,.14);
+    background:linear-gradient(115deg,#101B35 0%,#1B3767 62%,#246BFD 100%);
+    border-radius:20px; padding:26px 30px; color:white; margin-bottom:20px;
+    box-shadow:0 10px 30px rgba(16,27,53,.14);
 }
 .hero h1 { color:#fff; margin:0; font-size:2rem; }
 .hero p { color:#D7E2F6; margin:.45rem 0 0 0; }
 .section-label { color:#75819A; text-transform:uppercase; letter-spacing:1.2px;
- font-size:.72rem; font-weight:800; margin:8px 0 10px; }
+    font-size:.72rem; font-weight:800; margin:8px 0 10px; }
 .panel {
- background:#fff; border:1px solid var(--line); border-radius:16px;
- padding:18px 20px; box-shadow:0 4px 18px rgba(22,39,71,.035);
+    background:#fff; border:1px solid var(--line); border-radius:16px;
+    padding:18px 20px; box-shadow:0 4px 18px rgba(22,39,71,.035);
 }
 .tag { display:inline-block; background:#EAF1FF; color:#246BFD; padding:4px 9px;
- border-radius:20px; font-size:.75rem; font-weight:700; }
+    border-radius:20px; font-size:.75rem; font-weight:700; }
 div[data-testid="stVerticalBlockBorderWrapper"] { border-radius:14px; }
 </style>
 """, unsafe_allow_html=True)
