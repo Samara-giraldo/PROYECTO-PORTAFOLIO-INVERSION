@@ -1,10 +1,9 @@
 from datetime import date
+
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
-
-px.defaults.template = 'plotly_dark'
 
 from portfolio.database import Database
 from portfolio.portfolio_service import PortfolioService
@@ -16,44 +15,90 @@ from portfolio.market_data import MarketDataProvider
 # ============================================================
 
 st.set_page_config(
-    page_title="Mi portafolio de inversión",
+    page_title="Portafolio de inversión",
     page_icon="📈",
     layout="wide"
 )
 
-st.markdown(r"""<style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
-:root{color-scheme:dark;--bg:#080d0b;--panel:#121b17;--border:#2b3b32;--white:#f4f7f5;--muted:#b7c5bc;--green:#35d07f;}
-html,body,[class*='css'],[data-testid='stAppViewContainer']{font-family:'DM Sans',sans-serif!important;}
-.stApp,[data-testid='stAppViewContainer'],[data-testid='stMain']{background:var(--bg)!important;color:var(--white)!important;}
-.block-container{max-width:1500px;padding-top:1.5rem;padding-bottom:2rem;}
-[data-testid='stMain'] *{color:var(--white);}
-h1,h2,h3,h4,h5,h6,p,label,li,span,small,.stMarkdown{color:var(--white);}
-[data-testid='stCaptionContainer'] p,.stCaption,small{color:var(--muted)!important;}
-.hero{background:linear-gradient(115deg,#101713,#173b29,#146b3c);border:1px solid #2c8b58;padding:26px 30px;border-radius:18px;margin-bottom:20px;}
-.hero h1,.hero p,.hero *{color:#fff!important;}
-section[data-testid='stSidebar'],section[data-testid='stSidebar']>div{background:#0c1410!important;border-right:1px solid var(--border);}
-section[data-testid='stSidebar'] *{color:var(--white)!important;}
-div[data-testid='stMetric'],[data-testid='metric-container']{background:var(--panel)!important;border:1px solid var(--border)!important;border-radius:14px!important;padding:16px!important;}
-div[data-testid='stMetric'] label,div[data-testid='stMetric'] label *,div[data-testid='stMetricValue'],div[data-testid='stMetricValue'] *,div[data-testid='stMetricDelta'] *{color:var(--white)!important;opacity:1!important;}
-div[data-testid='stMetricValue']{font-size:clamp(1.2rem,2vw,2rem)!important;overflow-wrap:anywhere!important;}
-button[data-baseweb='tab'],button[data-baseweb='tab'] *{color:#d7e4dc!important;background:transparent!important;}
-button[data-baseweb='tab'][aria-selected='true']{border-bottom:3px solid var(--green)!important;}
-button[data-baseweb='tab'][aria-selected='true'] *{color:var(--green)!important;font-weight:700!important;}
-div.stButton>button,div.stFormSubmitButton>button,button[kind='primary']{background:#16834b!important;color:#fff!important;border:1px solid var(--green)!important;border-radius:10px!important;min-height:40px;font-weight:700!important;}
-div.stButton>button *,div.stFormSubmitButton>button *{color:#fff!important;}
-input,textarea,div[data-baseweb='input'] input,div[data-baseweb='textarea'] textarea{background:#18231d!important;color:#fff!important;-webkit-text-fill-color:#fff!important;border-color:#405348!important;}
-div[data-baseweb='select']>div{background:#18231d!important;color:#fff!important;border-color:#405348!important;}
-div[data-baseweb='select'] span,div[data-baseweb='select'] input,div[data-baseweb='select'] div{color:#fff!important;}
-[role='listbox'],[role='option'],[data-baseweb='popover'],[data-baseweb='menu']{background:#18231d!important;color:#fff!important;}
-[role='option'] *{color:#fff!important;}
-[data-testid='stDataFrame'],[data-testid='stTable']{background:var(--panel)!important;border:1px solid var(--border)!important;border-radius:10px!important;}
-[data-testid='stDataFrame'] *{color:var(--white)!important;}
-[data-testid='stForm'],[data-testid='stExpander']{background:var(--panel)!important;border:1px solid var(--border)!important;border-radius:12px!important;}
-hr{border-color:var(--border)!important;}[data-testid='stAlert'] *{color:var(--white)!important;}
-.stApp a{color:#65e69d!important;}::placeholder{color:#a9b8af!important;opacity:1!important;}
-</style>""", unsafe_allow_html=True)
+st.markdown("""
+<style>
+.stApp {
+    background: #080D16;
+    color: #F1F5F9;
+}
+[data-testid="stHeader"] {
+    background: #080D16;
+}
+[data-testid="stSidebar"] {
+    background: #101827;
+}
+[data-testid="stSidebar"] * {
+    color: #F1F5F9 !important;
+}
+h1, h2, h3, h4, p, label, span {
+    color: #F1F5F9;
+}
+div[data-testid="stMetric"] {
+    background: #121C2B;
+    border: 1px solid #253247;
+    border-radius: 14px;
+    padding: 16px;
+}
+div[data-testid="stMetricLabel"] {
+    color: #AAB8CA;
+}
+div[data-testid="stMetricValue"] {
+    color: #FFFFFF;
+}
+.stButton button, .stFormSubmitButton button {
+    background: #16A36A;
+    color: white;
+    border: 0;
+    border-radius: 9px;
+    font-weight: 700;
+    min-height: 40px;
+}
+.stButton button:hover, .stFormSubmitButton button:hover {
+    background: #128354;
+    color: white;
+}
+div[data-testid="stDataFrame"] {
+    border: 1px solid #253247;
+    border-radius: 10px;
+}
+div[data-testid="stExpander"] {
+    background: #111B2A;
+    border: 1px solid #253247;
+    border-radius: 10px;
+}
+button[data-baseweb="tab"] {
+    color: #AAB8CA;
+}
+button[data-baseweb="tab"][aria-selected="true"] {
+    color: #25D18A;
+}
+.hero {
+    background: linear-gradient(110deg, #101C2E, #123D32);
+    border: 1px solid #245644;
+    border-radius: 18px;
+    padding: 25px;
+    margin-bottom: 22px;
+}
+.hero h1 {
+    color: white;
+    margin: 0;
+}
+.hero p {
+    color: #B7DCCB;
+    margin-bottom: 0;
+}
+</style>
+""", unsafe_allow_html=True)
 
+
+# ============================================================
+# INICIALIZACIÓN
+# ============================================================
 
 db = Database()
 service = PortfolioService(db)
@@ -64,94 +109,54 @@ market = MarketDataProvider()
 # FUNCIONES AUXILIARES
 # ============================================================
 
-def money(value, currency="COP"):
-    value = float(value or 0)
-
-    if currency == "USD":
-        number = f"{value:,.2f}"
-        number = number.replace(",", "X").replace(".", ",").replace("X", ".")
-        return f"US$ {number}"
-
-    return f"$ {value:,.0f} COP".replace(",", ".")
+def cop(value):
+    if value is None:
+        return "Pendiente"
+    return f"$ {float(value):,.0f} COP"
 
 
-def percent(value):
+def money(value, currency):
+    if value is None:
+        return "Pendiente"
+    return f"{float(value):,.2f} {currency}"
+
+
+def pct(value):
     if value is None:
         return "—"
-
     return f"{float(value):.2f}%"
 
 
-def asset_label(asset):
+def to_cop(value, currency, usd_cop):
+    if value is None:
+        return None
+
+    factor = usd_cop if currency == "USD" else 1
+    return float(value) * factor
+
+
+def asset_text(asset):
     return (
-        f'{asset["name"]} | '
-        f'{asset["symbol"]} | '
+        f'{asset["name"]} | {asset["symbol"]} | '
         f'{asset["currency"]}'
     )
 
 
-def to_cop(value, currency, trm):
-    value = float(value or 0)
-
-    if currency == "USD":
-        return value * trm
-
-    return value
-
-
-def trii_standard_commission(gross_cop):
-    """
-    Tarifa estándar Trii para acciones colombianas:
-
-    Hasta $5.000.000:
-        $12.500 + IVA
-
-    Por encima de $5.000.000:
-        0,25% + IVA
-
-    El resultado se calcula por operación.
-    """
-    gross_cop = float(gross_cop)
-
-    if gross_cop <= 0:
-        return 0.0
-
-    if gross_cop <= 5_000_000:
-        base = 12_500.0
-    else:
-        base = gross_cop * 0.0025
-
-    iva = base * 0.19
-
-    return base + iva
-
-
-def create_fixed_asset(
-    name,
-    symbol,
-    kind,
-    capital,
-    annual_rate,
-    rate_type,
-    opened,
-    maturity,
-    frequency,
-    notes
+def add_fixed_asset(
+    name, symbol, kind, currency, market_name, capital,
+    annual_rate, rate_type, opened, maturity, frequency, notes
 ):
     db.add_asset(
-        name=name,
-        symbol=symbol,
-        asset_type=kind,
-        currency="COP",
-        market="Colombia",
-        current_price=capital,
-        source="Capital registrado por el inversionista"
+        name,
+        symbol,
+        kind,
+        currency,
+        market_name,
+        capital,
+        "Capital registrado por el inversionista"
     )
 
-    created = next(
-        a for a in db.get_assets()
-        if a["symbol"].upper() == symbol.upper()
-    )
+    created = db.get_assets()[-1]
 
     db.save_fixed_income_terms(
         created["id"],
@@ -168,106 +173,116 @@ def create_fixed_asset(
         created["id"],
         "COMPRA",
         opened.isoformat(),
-        1.0,
+        1,
         capital,
-        0.0
+        0
     )
 
-    return created
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def get_trm_cached():
+    """Conserva la consulta de TRM durante una hora."""
+    provider = MarketDataProvider()
+    return provider.fetch_trm()
 
 
-def refresh_assets():
-    return db.get_assets()
+def get_yahoo_quote(symbol):
+    """Consulta una cotización de Yahoo Finance."""
+    provider = MarketDataProvider()
+    return provider.fetch_yfinance_price(symbol)
 
 
 # ============================================================
-# CABECERA
+# TRM AUTOMÁTICA
+# ============================================================
+
+trm_error = None
+
+try:
+    usd_cop, trm_date, trm_source = get_trm_cached()
+except Exception as exc:
+    usd_cop = 4000.0
+    trm_date = "No disponible"
+    trm_source = "Valor provisional"
+    trm_error = str(exc)
+
+
+# ============================================================
+# ENCABEZADO
 # ============================================================
 
 st.markdown("""
 <div class="hero">
-    <h1>MI PORTAFOLIO DE INVERSIÓN</h1>
-    <p>
-        Seguimiento de acciones, renta fija, dividendos,
-        comisiones y rentabilidad.
-    </p>
+    <h1>PORTAFOLIO DE INVERSIÓN</h1>
+    <p>Seguimiento de acciones, renta fija, dividendos y rentabilidad.</p>
 </div>
 """, unsafe_allow_html=True)
 
 
 # ============================================================
-# TRM
+# PANEL LATERAL
 # ============================================================
-
-if "trm_value" not in st.session_state:
-    try:
-        trm_data = market.fetch_trm()
-        st.session_state.trm_value = trm_data["value"]
-        st.session_state.trm_date = trm_data["date"]
-        st.session_state.trm_source = trm_data["source"]
-    except Exception:
-        st.session_state.trm_value = None
-        st.session_state.trm_date = None
-        st.session_state.trm_source = None
-
 
 with st.sidebar:
     st.title("Panel de control")
-    st.caption("Tasa de cambio")
 
-    if st.button("Actualizar TRM oficial", use_container_width=True):
-        try:
-            trm_data = market.fetch_trm()
-            st.session_state.trm_value = trm_data["value"]
-            st.session_state.trm_date = trm_data["date"]
-            st.session_state.trm_source = trm_data["source"]
-            st.success("TRM actualizada.")
-        except Exception as exc:
-            st.error(str(exc))
+    st.subheader("TRM del dólar")
 
-    if st.session_state.trm_value is not None:
-        st.metric(
-            "TRM USD/COP",
-            money(st.session_state.trm_value)
-        )
-        st.caption(
-            f'Fecha publicada: {st.session_state.trm_date}'
-        )
-        st.caption(st.session_state.trm_source)
+    st.metric(
+        "1 dólar estadounidense",
+        f"$ {usd_cop:,.2f} COP"
+    )
 
-        trm = float(st.session_state.trm_value)
+    st.caption(f"Fecha de vigencia: {trm_date}")
+    st.caption(f"Fuente: {trm_source}")
 
-    else:
+    if trm_error:
         st.warning(
-            "No fue posible consultar la TRM. "
-            "Ingresa una tasa manual para continuar."
+            "No fue posible actualizar la TRM. Se está usando "
+            "un valor provisional de $4.000 COP. "
+            "Revisa tu conexión a internet."
         )
 
-        trm = st.number_input(
-            "TRM manual",
-            min_value=1.0,
-            value=4000.0,
-            step=10.0
-        )
-
-        st.caption(
-            "Esta tasa manual es un dato ingresado por ti, "
-            "no una cotización oficial."
-        )
+    if st.button("Actualizar TRM"):
+        get_trm_cached.clear()
+        st.rerun()
 
     st.divider()
-    st.caption("Intermediario configurado: Trii estándar")
+
+    st.subheader("Comisiones por empresa")
+
+    assets_sidebar = db.get_assets()
+    saved_fees = db.get_fee_settings()
+
+    for asset in assets_sidebar:
+        if asset["asset_type"] == "ACCION":
+            fee_default = saved_fees.get(asset["id"], 0.50)
+
+            fee = st.number_input(
+                f'{asset["name"]} (%)',
+                min_value=0.0,
+                max_value=10.0,
+                value=float(fee_default),
+                step=0.05,
+                key=f'fee_{asset["id"]}'
+            )
+
+            if abs(fee - fee_default) > 0.000001:
+                db.save_fee_setting(asset["id"], fee)
+
+    st.divider()
+
     st.caption(
-        "Las comisiones se estiman según el tarifario. "
-        "Verifica el cobro definitivo en tu comprobante de Trii."
+        "Las comisiones son configurables. Introduce las tarifas "
+        "que realmente te cobra tu intermediario."
     )
 
 
 # ============================================================
-# DATOS GENERALES
+# DATOS
 # ============================================================
 
-assets = refresh_assets()
+assets = db.get_assets()
 
 stocks = [
     a for a in assets
@@ -280,15 +295,13 @@ fixed_assets = [
 ]
 
 positions = service.positions()
+summary = service.summary(usd_cop)
 
 position_by_id = {
     p["id"]: p for p in positions
 }
 
-summary = service.summary(trm)
-
-income_rows = db.get_income_events()
-price_history = db.get_price_history()
+fee_settings = db.get_fee_settings()
 
 
 # ============================================================
@@ -312,121 +325,70 @@ tabs = st.tabs([
 # ============================================================
 
 with tabs[0]:
-
-    st.subheader("Resumen de tu patrimonio")
+    st.subheader("Resumen general")
 
     c1, c2, c3, c4 = st.columns(4)
 
-    c1.metric(
-        "Capital invertido",
-        money(summary["invested"])
-    )
-
-    c2.metric(
-        "Valor actual",
-        money(summary["market_value"])
-    )
-
-    c3.metric(
-        "Ganancia / pérdida",
-        money(summary["profit"])
-    )
-
-    c4.metric(
-        "Rentabilidad anualizada",
-        percent(summary["xirr_pct"])
-    )
+    c1.metric("Capital comprado", cop(summary["invested"]))
+    c2.metric("Valor de mercado conocido", cop(summary["market_value"]))
+    c3.metric("Ganancia / pérdida", cop(summary["profit"]))
+    c4.metric("Rentabilidad acumulada", pct(summary["accumulated_pct"]))
 
     c5, c6, c7, c8 = st.columns(4)
 
-    c5.metric(
-        "Ganancia realizada",
-        money(summary["realized"])
-    )
+    c5.metric("Ganancia realizada", cop(summary["realized"]))
+    c6.metric("Ganancia no realizada", cop(summary["unrealized"]))
+    c7.metric("Dividendos e intereses", cop(summary["income"]))
+    c8.metric("Comisiones registradas", cop(summary["fees"]))
 
-    c6.metric(
-        "Ganancia pendiente",
-        money(summary["unrealized"])
-    )
-
-    c7.metric(
-        "Dividendos e intereses",
-        money(summary["income"])
-    )
-
-    c8.metric(
-        "Comisiones pagadas",
-        money(summary["fees"])
-    )
+    if summary["pending_quotes"] > 0:
+        st.warning(
+            f'Hay {summary["pending_quotes"]} posición(es) sin cotización. '
+            "El valor de mercado y la rentabilidad anualizada pueden "
+            "estar incompletos."
+        )
 
     st.divider()
 
-    left, right = st.columns(2)
+    st.subheader("Distribución del portafolio")
 
-    with left:
-        st.markdown("#### Distribución del portafolio")
+    distribution = pd.DataFrame([
+        {
+            "Tipo": "Acciones",
+            "Valor": summary["variable_value"]
+        },
+        {
+            "Tipo": "CDT, TES y bonos",
+            "Valor": summary["fixed_value"]
+        }
+    ])
 
-        distribution = pd.DataFrame([
-            {
-                "Tipo": "Acciones",
-                "Valor": summary["variable_value"]
-            },
-            {
-                "Tipo": "CDT, TES y bonos",
-                "Valor": summary["fixed_value"]
-            }
-        ])
+    distribution = distribution[distribution["Valor"] > 0]
 
-        distribution = distribution[
-            distribution["Valor"] > 0
-        ]
-
-        if not distribution.empty:
-            fig = px.pie(
-                distribution,
-                names="Tipo",
-                values="Valor",
-                hole=0.60
-            )
-
-            st.plotly_chart(
-                fig,
-                use_container_width=True
-            )
-        else:
-            st.info("Todavía no hay inversiones registradas.")
-
-    with right:
-        st.markdown("#### Resultado de las inversiones")
-
-        results = pd.DataFrame([
-            {
-                "Concepto": "Ganancia realizada",
-                "Valor": summary["realized"]
-            },
-            {
-                "Concepto": "Ganancia pendiente",
-                "Valor": summary["unrealized"]
-            },
-            {
-                "Concepto": "Ingresos",
-                "Valor": summary["income"]
-            }
-        ])
-
-        fig = px.bar(
-            results,
-            x="Concepto",
-            y="Valor",
-            color="Concepto"
+    if not distribution.empty:
+        fig = px.pie(
+            distribution,
+            names="Tipo",
+            values="Valor",
+            hole=0.6
         )
 
-        st.plotly_chart(
-            fig,
-            use_container_width=True
+        fig.update_layout(
+            paper_bgcolor="#080D16",
+            plot_bgcolor="#080D16",
+            font_color="white"
         )
 
-    st.markdown("#### Posiciones abiertas")
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info(
+            "La distribución aparecerá cuando registres inversiones "
+            "con valor disponible."
+        )
+
+    st.divider()
+
+    st.subheader("Tus posiciones")
 
     open_positions = [
         p for p in positions
@@ -441,22 +403,22 @@ with tabs[0]:
                 "Activo": p["name"],
                 "Tipo": p["asset_type"],
                 "Cantidad": p["quantity"],
-                "Precio": p["current_price"],
-                "Moneda": p["currency"],
-                "Valor COP": to_cop(
-                    p["market_value"],
-                    p["currency"],
-                    trm
+                "Precio actual": (
+                    money(p["current_price"], p["currency"])
+                    if p["has_price"] else "Pendiente"
                 ),
-                "Costo COP": to_cop(
-                    p["remaining_cost"],
-                    p["currency"],
-                    trm
+                "Valor actual COP": to_cop(
+                    p["market_value"], p["currency"], usd_cop
+                ),
+                "Costo restante COP": to_cop(
+                    p["remaining_cost"], p["currency"], usd_cop
                 ),
                 "Resultado COP": to_cop(
-                    p["unrealized"],
-                    p["currency"],
-                    trm
+                    p["unrealized"], p["currency"], usd_cop
+                ),
+                "Fecha de cotización": (
+                    p.get("price_date") or "Sin fecha"
+                    if p["has_price"] else "Pendiente"
                 )
             })
 
@@ -467,7 +429,7 @@ with tabs[0]:
         )
 
     else:
-        st.info("No tienes posiciones abiertas.")
+        st.info("Aún no has registrado inversiones.")
 
 
 # ============================================================
@@ -475,384 +437,413 @@ with tabs[0]:
 # ============================================================
 
 with tabs[1]:
-
     st.subheader("Acciones y cotizaciones")
 
     if stocks:
-        rows = []
+        stock_rows = []
 
         for asset in stocks:
             p = position_by_id[asset["id"]]
 
-            rows.append({
+            stock_rows.append({
                 "Empresa": asset["name"],
                 "Símbolo": asset["symbol"],
                 "Mercado": asset["market"],
-                "Precio": asset["current_price"],
-                "Moneda": asset["currency"],
+                "Precio": (
+                    money(asset["current_price"], asset["currency"])
+                    if p["has_price"] else "Pendiente"
+                ),
                 "Cantidad": p["quantity"],
                 "Valor COP": to_cop(
-                    p["market_value"],
-                    asset["currency"],
-                    trm
+                    p["market_value"], asset["currency"], usd_cop
                 ),
-                "Fuente": asset["source"]
+                "Resultado COP": to_cop(
+                    p["unrealized"], asset["currency"], usd_cop
+                ),
+                "Fuente": asset["source"],
+                "Fecha": asset.get("price_date") or "Sin fecha"
             })
 
         st.dataframe(
-            pd.DataFrame(rows),
+            pd.DataFrame(stock_rows),
             use_container_width=True,
             hide_index=True
         )
 
-        selected = st.selectbox(
-            "Selecciona una acción",
-            stocks,
-            format_func=asset_label
-        )
-
-        p = position_by_id[selected["id"]]
-
-        a, b, c = st.columns(3)
-
-        a.metric(
-            "Precio guardado",
-            money(
-                selected["current_price"],
-                selected["currency"]
-            )
-        )
-
-        b.metric(
-            "Cantidad",
-            f'{p["quantity"]:,.0f}'
-        )
-
-        c.metric(
-            "Valor aproximado en COP",
-            money(
-                to_cop(
-                    p["market_value"],
-                    selected["currency"],
-                    trm
-                )
-            )
-        )
-
         st.divider()
 
-        if selected["currency"] == "USD":
-            if st.button("Actualizar último cierre disponible desde Yahoo Finance"):
-                try:
-                    price, source, quote_date = market.fetch_yfinance_price(
-                        selected["symbol"]
+        selected_stock = st.selectbox(
+            "Selecciona una acción",
+            stocks,
+            format_func=asset_text,
+            key="quote_stock"
+        )
+
+        selected_position = position_by_id[selected_stock["id"]]
+
+        m1, m2, m3 = st.columns(3)
+
+        m1.metric(
+            "Precio guardado",
+            money(
+                selected_stock["current_price"],
+                selected_stock["currency"]
+            ) if selected_position["has_price"] else "Pendiente"
+        )
+
+        m2.metric(
+            "Cantidad en cartera",
+            f'{selected_position["quantity"]:,.0f}'
+        )
+
+        m3.metric(
+            "Valor de posición",
+            cop(to_cop(
+                selected_position["market_value"],
+                selected_stock["currency"],
+                usd_cop
+            ))
+        )
+
+        st.caption(
+            f'Fuente: {selected_stock["source"]} · '
+            f'Fecha: {selected_stock.get("price_date") or "Sin fecha"}'
+        )
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if selected_stock["currency"] == "USD":
+                if st.button(
+                    "Actualizar cotización desde Yahoo Finance",
+                    key="refresh_quote"
+                ):
+                    try:
+                        price, source, quote_date = get_yahoo_quote(
+                            selected_stock["symbol"]
+                        )
+
+                        db.update_price(
+                            selected_stock["id"],
+                            price,
+                            source,
+                            quote_date
+                        )
+
+                        st.success(
+                            f"Cotización guardada: "
+                            f"{price:,.2f} {selected_stock['currency']}"
+                        )
+
+                        st.rerun()
+
+                    except Exception as error:
+                        st.error(str(error))
+            else:
+                st.info(
+                    "Esta acción está en COP. Registra el precio "
+                    "consultado en tu intermediario o fuente de mercado."
+                )
+
+        with col2:
+            with st.form("manual_quote_form"):
+                manual_price = st.number_input(
+                    f'Precio manual ({selected_stock["currency"]})',
+                    min_value=0.000001,
+                    value=max(
+                        float(selected_stock["current_price"] or 0),
+                        0.000001
+                    ),
+                    step=1.0,
+                    format="%.2f"
+                )
+
+                manual_source = st.text_input(
+                    "Fuente del precio",
+                    value="Ingreso manual"
+                )
+
+                quote_day = st.date_input(
+                    "Fecha de la cotización",
+                    value=date.today()
+                )
+
+                if st.form_submit_button("Guardar cotización"):
+                    db.update_price(
+                        selected_stock["id"],
+                        manual_price,
+                        manual_source.strip() or "Ingreso manual",
+                        quote_day.isoformat()
                     )
 
+                    st.success("Cotización guardada.")
+                    st.rerun()
+
+    else:
+        st.info("No tienes acciones registradas.")
+
+    with st.expander("Agregar una acción al catálogo"):
+        with st.form("new_stock_form"):
+            company = st.text_input("Nombre de la empresa")
+            ticker = st.text_input("Símbolo bursátil")
+            currency = st.selectbox("Moneda", ["COP", "USD"])
+            stock_market = st.text_input("Mercado", value="Manual")
+
+            initial_fee = st.number_input(
+                "Comisión estimada (%)",
+                min_value=0.0,
+                max_value=10.0,
+                value=0.50,
+                step=0.05
+            )
+
+            if st.form_submit_button("Agregar empresa"):
+                if not company.strip() or not ticker.strip():
+                    st.error("Escribe el nombre y el símbolo.")
+
+                elif any(
+                    a["symbol"].upper() == ticker.strip().upper()
+                    for a in assets
+                ):
+                    st.error("Ese símbolo ya está registrado.")
+
+                else:
+                    db.add_asset(
+                        company.strip(),
+                        ticker.strip().upper(),
+                        "ACCION",
+                        currency,
+                        stock_market.strip() or "Manual",
+                        0,
+                        "Pendiente de cotización"
+                    )
+
+                    new_asset = db.get_assets()[-1]
+
+                    db.save_fee_setting(
+                        new_asset["id"],
+                        initial_fee
+                    )
+
+                    st.success("Acción agregada.")
+                    st.rerun()
+
+
+# ============================================================
+# 3. COMPRA Y VENTA
+# ============================================================
+
+with tabs[2]:
+    st.subheader("Registrar compra o venta")
+
+    if stocks:
+        # La selección está FUERA del formulario.
+        # Así Streamlit puede reaccionar cuando cambias de empresa.
+        selected = st.selectbox(
+            "Selecciona la empresa",
+            stocks,
+            format_func=asset_text,
+            key="trade_selected_stock"
+        )
+
+        selected_id = selected["id"]
+
+        # Detecta si cambiaste de empresa.
+        previous_id = st.session_state.get(
+            "previous_trade_asset_id"
+        )
+
+        if previous_id != selected_id:
+            st.session_state["previous_trade_asset_id"] = selected_id
+
+            # Para activos en USD intenta traer el último cierre.
+            if selected["currency"] == "USD":
+                try:
+                    with st.spinner(
+                        f'Consultando precio de {selected["name"]}...'
+                    ):
+                        price, source, quote_date = get_yahoo_quote(
+                            selected["symbol"]
+                        )
+
                     db.update_price(
-                        selected["id"],
+                        selected_id,
                         price,
                         source,
                         quote_date
                     )
 
-                    st.success("Precio actualizado.")
-                    st.rerun()
+                    # Actualiza también los datos locales.
+                    selected["current_price"] = price
+                    selected["source"] = source
+                    selected["price_date"] = quote_date
+                    selected["price_status"] = "DISPONIBLE"
 
-                except Exception as exc:
-                    st.error(str(exc))
-
-        else:
-            st.info(
-                "Para acciones colombianas, registra el precio "
-                "consultado en Trii. Esta aplicación no tiene "
-                "acceso directo a la cuenta ni a la API privada de Trii."
-            )
-
-        with st.form("manual_price_form"):
-            st.markdown("#### Registrar precio consultado")
-
-            manual_price = st.number_input(
-                f'Precio en {selected["currency"]}',
-                min_value=0.0,
-                value=float(selected["current_price"]),
-                step=1.0
-            )
-
-            manual_source = st.text_input(
-                "Fuente",
-                value="Trii - precio consultado manualmente"
-            )
-
-            if st.form_submit_button("Guardar precio"):
-                if manual_price <= 0:
-                    st.error("El precio debe ser mayor que cero.")
-                else:
-                    db.update_price(
-                        selected["id"],
-                        manual_price,
-                        manual_source,
-                        market.today()
+                    st.success(
+                        f"Precio actualizado: "
+                        f"{price:,.2f} {selected['currency']} "
+                        f"(cierre del {quote_date})."
                     )
 
-                    st.success("Precio guardado en el historial.")
-                    st.rerun()
-
-    else:
-        st.info("No hay acciones registradas.")
-
-    st.divider()
-
-# 3. COMPRA Y VENTA
-# ============================================================
-
-with tabs[2]:
-
-    st.subheader("Registrar una compra o una venta")
-    st.write(
-        "Registra aquí una operación que ya realizaste en Trii. "
-        "Esta aplicación lleva tus cuentas, pero no ejecuta órdenes."
-    )
-
-    NEW_COMPANY = "➕ Es mi primera compra de esta empresa"
-    options = [asset_label(a) for a in stocks]
-
-    choice = st.selectbox(
-        "¿Qué empresa compraste o vendiste?",
-        [NEW_COMPANY] + options,
-        key="trade_company_choice"
-    )
-
-    is_new = choice == NEW_COMPANY
-    selected = None
-
-    if is_new:
-        st.info(
-            "Si la empresa todavía no aparece, regístrala aquí. "
-            "Su primera compra quedará guardada al mismo tiempo."
-        )
-
-        c1, c2 = st.columns(2)
-
-        with c1:
-            company_name = st.text_input(
-                "Nombre de la empresa",
-                placeholder="Ej. Apple",
-                key="new_trade_company"
-            )
-
-            company_symbol = st.text_input(
-                "Símbolo bursátil",
-                placeholder="Ej. AAPL",
-                key="new_trade_symbol"
-            ).strip().upper()
-
-        with c2:
-            company_currency = st.selectbox(
-                "Moneda",
-                ["COP", "USD"],
-                key="new_trade_currency"
-            )
-
-            default_market = (
-                "BVC" if company_currency == "COP" else "NASDAQ"
-            )
-
-            company_market = st.text_input(
-                "Bolsa o mercado",
-                value=default_market,
-                key="new_trade_market"
-            )
-
-    else:
-        selected = next(
-            a for a in stocks if asset_label(a) == choice
-        )
-
-        company_currency = selected["currency"]
-
-        st.caption(
-            f"Empresa seleccionada: "
-            f"**{selected['name']} ({selected['symbol']})**"
-        )
-
-    st.divider()
-
-    operation = st.radio(
-        "¿Qué hiciste?",
-        ["COMPRA", "VENTA"],
-        horizontal=True,
-        format_func=lambda x: (
-            "Compré acciones" if x == "COMPRA" else "Vendí acciones"
-        ),
-        key="trade_operation"
-    )
-
-    left, right = st.columns(2)
-
-    with left:
-        trade_date = st.date_input(
-            "Fecha de la operación",
-            value=date.today(),
-            key="trade_date_simple"
-        )
-
-        quantity = st.number_input(
-            "Cantidad de acciones",
-            min_value=1,
-            value=1,
-            step=1,
-            format="%d",
-            help="Escribe unidades enteras: por ejemplo, 2."
-        )
-
-    default_price = (
-        0.0 if is_new else float(selected["current_price"] or 0)
-    )
-
-    with right:
-        price = st.number_input(
-            f"Precio unitario: cuánto costó UNA acción ({company_currency})",
-            min_value=0.0,
-            value=default_price,
-            step=1.0 if company_currency == "COP" else 0.01,
-            format="%.0f" if company_currency == "COP" else "%.2f",
-            help="Copia el precio de una sola acción de tu comprobante."
-        )
-
-    gross = int(quantity) * float(price)
-
-    if company_currency == "COP":
-        commission = trii_standard_commission(gross)
-
-        st.caption(
-            "Comisión estimada con la tarifa estándar de Trii. "
-            "Comprueba el cobro definitivo en tu comprobante."
-        )
-
-    else:
-        commission = st.number_input(
-            "Comisión de esta operación (USD)",
-            min_value=0.0,
-            value=0.0,
-            step=0.01,
-            format="%.2f"
-        )
-
-    total = (
-        gross + commission
-        if operation == "COMPRA"
-        else gross - commission
-    )
-
-    st.markdown("#### Resumen antes de guardar")
-
-    a, b, c = st.columns(3)
-
-    a.metric("Cantidad", f"{int(quantity)} acciones")
-    a.metric("Precio por acción", money(price, company_currency))
-
-    b.metric("Valor de las acciones", money(gross, company_currency))
-    b.metric("Comisión estimada", money(commission, company_currency))
-
-    c.metric(
-        "Total que pagaste" if operation == "COMPRA"
-        else "Neto que recibiste",
-        money(total, company_currency)
-    )
-
-    if st.button(
-        "Guardar compra" if operation == "COMPRA" else "Guardar venta",
-        type="primary",
-        key="save_trade_simple"
-    ):
-
-        try:
-            if price <= 0:
-                st.error("Escribe el precio real de UNA acción.")
-
-            elif is_new and (
-                not company_name.strip() or not company_symbol
-            ):
-                st.error("Completa el nombre y el símbolo.")
-
-            elif is_new and any(
-                a["symbol"].upper() == company_symbol
-                for a in assets
-            ):
-                st.error(
-                    "Ese símbolo ya existe. Selecciona la empresa de la lista."
-                )
-
-            elif is_new and operation == "VENTA":
-                st.error(
-                    "Primero debes registrar una compra de esa empresa."
-                )
-
-            elif (
-                not is_new
-                and operation == "VENTA"
-                and int(quantity) >
-                position_by_id[selected["id"]]["quantity"] + 1e-9
-            ):
-                st.error("No tienes suficientes acciones para esa venta.")
+                except Exception as error:
+                    st.warning(
+                        "No se pudo consultar automáticamente el precio. "
+                        "Se conserva el último precio guardado. "
+                        f"Detalle: {error}"
+                    )
 
             else:
-                if is_new:
-                    db.add_asset(
-                        company_name.strip(),
-                        company_symbol,
-                        "ACCION",
-                        company_currency,
-                        company_market.strip() or "Mercado no especificado",
-                        0.0,
-                        "Sin cotización actual verificada"
-                    )
-
-                    selected = next(
-                        a for a in db.get_assets()
-                        if a["symbol"].upper() == company_symbol
-                    )
-
-                db.add_transaction(
-                    selected["id"],
-                    operation,
-                    trade_date.isoformat(),
-                    int(quantity),
-                    float(price),
-                    float(commission)
+                st.info(
+                    "Para esta acción colombiana se conserva el último "
+                    "precio registrado. No hay una conexión automática "
+                    "de mercado confirmada para este símbolo."
                 )
 
-                st.success(
-                    "Operación guardada. Tu portafolio se actualizará."
+            # El campo de precio empieza con el valor actualizado.
+            st.session_state[
+                f"trade_price_{selected_id}"
+            ] = float(selected["current_price"] or 0)
+
+        # Recupera la posición de la empresa seleccionada.
+        current_position = service.positions()
+
+        current_position = next(
+            p for p in current_position
+            if p["id"] == selected_id
+        )
+
+        current_fee = db.get_fee_settings().get(
+            selected_id,
+            0.50
+        )
+
+        st.caption(
+            f'Último precio guardado: '
+            f'{money(selected["current_price"], selected["currency"])} · '
+            f'Fuente: {selected.get("source", "Sin fuente")} · '
+            f'Fecha: {selected.get("price_date") or "Sin fecha"}'
+        )
+
+        with st.form("trade_form"):
+            operation = st.radio(
+                "Tipo de operación",
+                ["COMPRA", "VENTA"],
+                horizontal=True
+            )
+
+            trade_day = st.date_input(
+                "Fecha de operación",
+                value=date.today()
+            )
+
+            # Cantidad entera: evita mostrar 1,000000.
+            quantity = st.number_input(
+                "Cantidad de acciones",
+                min_value=1,
+                value=1,
+                step=1,
+                format="%d"
+            )
+
+            # El valor inicial viene de la cotización guardada.
+            price = st.number_input(
+                f'Precio por acción ({selected["currency"]})',
+                min_value=0.0,
+                value=float(
+                    st.session_state.get(
+                        f"trade_price_{selected_id}",
+                        selected["current_price"] or 0
+                    )
+                ),
+                step=0.01,
+                format="%.2f",
+                key=f"trade_price_{selected_id}"
+            )
+
+            gross = quantity * price
+            commission = gross * current_fee / 100
+
+            if operation == "COMPRA":
+                st.info(
+                    f"Valor de compra: {gross:,.2f} "
+                    f"{selected['currency']} · "
+                    f"Comisión estimada: {commission:,.2f} · "
+                    f"Total: {gross + commission:,.2f} "
+                    f"{selected['currency']}"
                 )
 
-                st.rerun()
+            else:
+                st.info(
+                    f"Valor de venta: {gross:,.2f} "
+                    f"{selected['currency']} · "
+                    f"Comisión estimada: {commission:,.2f} · "
+                    f"Neto: {gross - commission:,.2f} "
+                    f"{selected['currency']}"
+                )
 
-        except Exception as exc:
-            st.error(f"No se pudo guardar la operación: {exc}")
+            confirmed = st.checkbox(
+                "Confirmo que los datos de esta operación son correctos."
+            )
 
-    st.caption(
-        "Esta pantalla registra operaciones que ya hiciste en Trii. "
-        "No ejecuta compras reales."
-    )
+            save_trade = st.form_submit_button(
+                "Guardar operación"
+            )
+
+            if save_trade:
+                available = current_position["quantity"]
+
+                if not confirmed:
+                    st.error("Debes confirmar la operación.")
+
+                elif quantity <= 0:
+                    st.error("La cantidad debe ser mayor que cero.")
+
+                elif price <= 0:
+                    st.error("El precio debe ser mayor que cero.")
+
+                elif (
+                    operation == "VENTA"
+                    and quantity > available + 1e-9
+                ):
+                    st.error(
+                        f"No tienes suficientes acciones. "
+                        f"Disponibles: {available:,.0f}."
+                    )
+
+                else:
+                    db.add_transaction(
+                        selected_id,
+                        operation,
+                        trade_day.isoformat(),
+                        quantity,
+                        price,
+                        commission
+                    )
+
+                    st.success("Operación registrada correctamente.")
+                    st.rerun()
+
+        st.caption(
+            "El precio de compra o venta queda guardado en el historial. "
+            "Actualizar una cotización no modifica operaciones anteriores."
+        )
+
+    else:
+        st.info(
+            "Primero agrega una acción en la pestaña Acciones."
+        )
 
 
+# ============================================================
 # 4. CDT
 # ============================================================
 
 with tabs[3]:
-
-    st.subheader("Certificados de Depósito a Término")
-
-    cdt_assets = [
-        a for a in fixed_assets
-        if a["asset_type"] == "CDT"
-    ]
+    st.subheader("Inversiones en CDT")
 
     cdt_positions = [
         p for p in positions
-        if p["asset_type"] == "CDT"
-        and p["quantity"] > 0
+        if p["asset_type"] == "CDT" and p["quantity"] > 0
     ]
 
     if cdt_positions:
@@ -860,9 +851,20 @@ with tabs[3]:
             pd.DataFrame([
                 {
                     "CDT": p["name"],
-                    "Capital restante": money(p["remaining_cost"]),
-                    "Valor registrado": money(p["market_value"]),
-                    "Resultado": money(p["unrealized"])
+                    "Capital registrado COP": cop(
+                        to_cop(
+                            p["remaining_cost"],
+                            p["currency"],
+                            usd_cop
+                        )
+                    ),
+                    "Valor registrado COP": cop(
+                        to_cop(
+                            p["market_value"],
+                            p["currency"],
+                            usd_cop
+                        )
+                    )
                 }
                 for p in cdt_positions
             ]),
@@ -870,19 +872,18 @@ with tabs[3]:
             hide_index=True
         )
     else:
-        st.info("No tienes CDT registrados.")
+        st.info("Todavía no has registrado CDT.")
 
     with st.expander("Registrar un CDT"):
-
         with st.form("cdt_form"):
+            name = st.text_input("Nombre o entidad")
+            code = st.text_input("Código de referencia")
 
-            name = st.text_input("Entidad o nombre del CDT")
-            symbol = st.text_input("Código de referencia")
             capital = st.number_input(
                 "Capital invertido COP",
                 min_value=1.0,
-                value=1_000_000.0,
-                step=100_000.0
+                value=1000000.0,
+                step=100000.0
             )
 
             rate = st.number_input(
@@ -893,8 +894,13 @@ with tabs[3]:
             )
 
             rate_type = st.selectbox(
-                "Modalidad",
-                ["Efectiva anual", "Nominal anual", "Fija", "Variable"]
+                "Modalidad de tasa",
+                [
+                    "Efectiva anual",
+                    "Nominal anual",
+                    "Fija",
+                    "Variable"
+                ]
             )
 
             opened = st.date_input(
@@ -920,29 +926,30 @@ with tabs[3]:
                 ]
             )
 
-            notes = st.text_area("Condiciones y observaciones")
+            notes = st.text_area("Observaciones")
 
-            if st.form_submit_button("Guardar CDT"):
-
-                symbol = symbol.strip().upper()
-
-                if not name.strip() or not symbol:
+            if st.form_submit_button("Registrar CDT"):
+                if not name.strip() or not code.strip():
                     st.error("Completa el nombre y el código.")
 
                 elif maturity <= opened:
-                    st.error("El vencimiento debe ser posterior a la apertura.")
+                    st.error(
+                        "El vencimiento debe ser posterior a la apertura."
+                    )
 
                 elif any(
-                    a["symbol"].upper() == symbol
+                    a["symbol"].upper() == code.strip().upper()
                     for a in assets
                 ):
                     st.error("Ese código ya está registrado.")
 
                 else:
-                    create_fixed_asset(
+                    add_fixed_asset(
                         name.strip(),
-                        symbol,
+                        code.strip().upper(),
                         "CDT",
+                        "COP",
+                        "Entidad financiera",
                         capital,
                         rate,
                         rate_type,
@@ -955,25 +962,19 @@ with tabs[3]:
                     st.success("CDT registrado.")
                     st.rerun()
 
-    terms = [
+    cdt_terms = [
         t for t in db.get_fixed_income_terms()
         if t["asset_type"] == "CDT"
     ]
 
-    if terms:
-        st.markdown("#### Condiciones registradas")
+    if cdt_terms:
+        st.subheader("Condiciones registradas")
 
         st.dataframe(
-            pd.DataFrame(terms),
+            pd.DataFrame(cdt_terms),
             use_container_width=True,
             hide_index=True
         )
-
-    st.caption(
-        "El capital se registra como inversión. La tasa y el vencimiento "
-        "son datos contractuales ingresados por ti; el valor mostrado "
-        "no sustituye una liquidación bancaria oficial."
-    )
 
 
 # ============================================================
@@ -981,50 +982,54 @@ with tabs[3]:
 # ============================================================
 
 with tabs[4]:
-
     st.subheader("TES y bonos")
 
-    bond_positions = [
+    fixed_positions = [
         p for p in positions
         if p["asset_type"] in ("TES", "BONO")
         and p["quantity"] > 0
     ]
 
-    if bond_positions:
+    if fixed_positions:
         st.dataframe(
             pd.DataFrame([
                 {
                     "Instrumento": p["name"],
                     "Tipo": p["asset_type"],
-                    "Capital restante": money(p["remaining_cost"]),
-                    "Valor registrado": money(p["market_value"]),
-                    "Resultado": money(p["unrealized"])
+                    "Capital registrado COP": cop(
+                        to_cop(
+                            p["remaining_cost"],
+                            p["currency"],
+                            usd_cop
+                        )
+                    ),
+                    "Valor actual COP": cop(
+                        to_cop(
+                            p["market_value"],
+                            p["currency"],
+                            usd_cop
+                        )
+                    )
                 }
-                for p in bond_positions
+                for p in fixed_positions
             ]),
             use_container_width=True,
             hide_index=True
         )
     else:
-        st.info("No tienes TES o bonos registrados.")
+        st.info("Todavía no tienes TES o bonos registrados.")
 
     with st.expander("Registrar TES o bono"):
-
         with st.form("bond_form"):
-
-            kind = st.selectbox(
-                "Tipo de instrumento",
-                ["TES", "BONO"]
-            )
-
+            kind = st.selectbox("Instrumento", ["TES", "BONO"])
             name = st.text_input("Nombre del instrumento")
-            symbol = st.text_input("Código o referencia")
+            code = st.text_input("Código o referencia")
 
             capital = st.number_input(
-                "Valor de compra COP",
+                "Capital invertido COP",
                 min_value=1.0,
-                value=1_000_000.0,
-                step=100_000.0
+                value=1000000.0,
+                step=100000.0
             )
 
             rate = st.number_input(
@@ -1051,7 +1056,7 @@ with tabs[4]:
             )
 
             maturity = st.date_input(
-                "Fecha de vencimiento",
+                "Vencimiento",
                 value=date.today(),
                 key="bond_maturity"
             )
@@ -1068,31 +1073,30 @@ with tabs[4]:
                 ]
             )
 
-            notes = st.text_area(
-                "Emisor, condiciones y observaciones"
-            )
+            notes = st.text_area("Emisor y condiciones")
 
-            if st.form_submit_button("Guardar instrumento"):
-
-                symbol = symbol.strip().upper()
-
-                if not name.strip() or not symbol:
+            if st.form_submit_button("Registrar instrumento"):
+                if not name.strip() or not code.strip():
                     st.error("Completa el nombre y el código.")
 
                 elif maturity <= opened:
-                    st.error("El vencimiento debe ser posterior a la compra.")
+                    st.error(
+                        "El vencimiento debe ser posterior a la compra."
+                    )
 
                 elif any(
-                    a["symbol"].upper() == symbol
+                    a["symbol"].upper() == code.strip().upper()
                     for a in assets
                 ):
                     st.error("Ese código ya está registrado.")
 
                 else:
-                    create_fixed_asset(
+                    add_fixed_asset(
                         name.strip(),
-                        symbol,
+                        code.strip().upper(),
                         kind,
+                        "COP",
+                        "Gobierno / emisor",
                         capital,
                         rate,
                         rate_type,
@@ -1105,13 +1109,20 @@ with tabs[4]:
                     st.success("Instrumento registrado.")
                     st.rerun()
 
+    st.warning(
+        "Registrar un TES o bono no significa que tengamos su precio "
+        "de mercado actualizado. La valoración debe actualizarse con "
+        "una cotización real. La tasa contractual tampoco equivale "
+        "automáticamente a la rentabilidad obtenida."
+    )
+
     terms = [
         t for t in db.get_fixed_income_terms()
         if t["asset_type"] in ("TES", "BONO")
     ]
 
     if terms:
-        st.markdown("#### Condiciones registradas")
+        st.subheader("Condiciones registradas")
 
         st.dataframe(
             pd.DataFrame(terms),
@@ -1119,31 +1130,20 @@ with tabs[4]:
             hide_index=True
         )
 
-    st.warning(
-        "La aplicación no tiene una fuente licenciada de precios de "
-        "mercado para valorar automáticamente todos los TES y bonos. "
-        "El valor registrado no debe interpretarse como precio de mercado."
-    )
-
 
 # ============================================================
 # 6. DIVIDENDOS E INTERESES
 # ============================================================
 
 with tabs[5]:
+    st.subheader("Dividendos e intereses")
 
-    st.subheader("Dividendos e intereses recibidos")
-
-    all_assets = db.get_assets()
-
-    if all_assets:
-
+    if assets:
         with st.form("income_form"):
-
-            selected = st.selectbox(
-                "Activo que generó el ingreso",
-                all_assets,
-                format_func=asset_label
+            income_asset = st.selectbox(
+                "Inversión que generó el ingreso",
+                assets,
+                format_func=asset_text
             )
 
             income_type = st.selectbox(
@@ -1157,7 +1157,7 @@ with tabs[5]:
             )
 
             amount = st.number_input(
-                f'Valor recibido ({selected["currency"]})',
+                f'Valor recibido ({income_asset["currency"]})',
                 min_value=0.0,
                 value=0.0,
                 step=1000.0
@@ -1168,13 +1168,12 @@ with tabs[5]:
             )
 
             if st.form_submit_button("Registrar ingreso"):
-
                 if amount <= 0:
                     st.error("El valor debe ser mayor que cero.")
 
                 else:
                     db.add_income(
-                        selected["id"],
+                        income_asset["id"],
                         income_type,
                         income_date.isoformat(),
                         amount,
@@ -1184,19 +1183,20 @@ with tabs[5]:
                     st.success("Ingreso registrado.")
                     st.rerun()
 
-    if income_rows:
+    income_rows = db.get_income_events()
 
+    if income_rows:
         income_table = pd.DataFrame([
             {
                 "Fecha": e["date"],
                 "Activo": e["asset_name"],
                 "Tipo": e["event_type"],
-                "Valor": e["amount"],
+                "Valor recibido": e["amount"],
                 "Moneda": e["currency"],
                 "Valor COP": to_cop(
                     e["amount"],
                     e["currency"],
-                    trm
+                    usd_cop
                 ),
                 "Descripción": e["description"]
             }
@@ -1209,18 +1209,22 @@ with tabs[5]:
             hide_index=True
         )
 
-        total_income = sum(
-            to_cop(e["amount"], e["currency"], trm)
+        total_income_cop = sum(
+            to_cop(
+                e["amount"],
+                e["currency"],
+                usd_cop
+            )
             for e in income_rows
         )
 
         st.metric(
             "Total de ingresos registrados",
-            money(total_income)
+            cop(total_income_cop)
         )
 
     else:
-        st.info("Todavía no has registrado ingresos.")
+        st.info("No has registrado dividendos ni intereses.")
 
 
 # ============================================================
@@ -1228,83 +1232,63 @@ with tabs[5]:
 # ============================================================
 
 with tabs[6]:
-
     st.subheader("Rentabilidad del portafolio")
 
-    c1, c2, c3, c4 = st.columns(4)
+    r1, r2, r3, r4 = st.columns(4)
 
-    c1.metric(
+    r1.metric(
         "Rentabilidad acumulada",
-        percent(summary["accumulated_pct"])
+        pct(summary["accumulated_pct"])
     )
 
-    c2.metric(
-        "Rentabilidad anualizada",
-        percent(summary["xirr_pct"])
+    r2.metric(
+        "Rentabilidad anualizada estimada",
+        pct(summary["xirr_pct"])
     )
 
-    c3.metric(
+    r3.metric(
         "Ganancia / pérdida",
-        money(summary["profit"])
+        cop(summary["profit"])
     )
 
-    c4.metric(
-        "Comisiones acumuladas",
-        money(summary["fees"])
+    r4.metric(
+        "Comisiones",
+        cop(summary["fees"])
     )
+
+    if summary["pending_quotes"] > 0:
+        st.warning(
+            "La rentabilidad anualizada no se muestra porque existen "
+            "posiciones abiertas sin cotización."
+        )
+
+    st.subheader("Resultado por inversión")
 
     result_rows = []
 
     for p in positions:
-
         if p["total_buys"] > 0 or p["quantity"] > 0:
-
             result_rows.append({
                 "Activo": p["name"],
                 "Ganancia realizada COP": to_cop(
                     p["realized"],
                     p["currency"],
-                    trm
+                    usd_cop
                 ),
-                "Ganancia pendiente COP": to_cop(
+                "Ganancia no realizada COP": to_cop(
                     p["unrealized"],
                     p["currency"],
-                    trm
+                    usd_cop
                 ),
                 "Valor actual COP": to_cop(
                     p["market_value"],
                     p["currency"],
-                    trm
+                    usd_cop
                 )
             })
 
     if result_rows:
-
         result_df = pd.DataFrame(result_rows)
-
-        fig = go.Figure()
-
-        fig.add_trace(go.Bar(
-            name="Ganancia realizada",
-            x=result_df["Activo"],
-            y=result_df["Ganancia realizada COP"]
-        ))
-
-        fig.add_trace(go.Bar(
-            name="Ganancia pendiente",
-            x=result_df["Activo"],
-            y=result_df["Ganancia pendiente COP"]
-        ))
-
-        fig.update_layout(
-            barmode="group",
-            title="Resultado por activo"
-        )
-
-        st.plotly_chart(
-            fig,
-            use_container_width=True
-        )
 
         st.dataframe(
             result_df,
@@ -1312,18 +1296,51 @@ with tabs[6]:
             hide_index=True
         )
 
+        chart_df = result_df.melt(
+            id_vars="Activo",
+            value_vars=[
+                "Ganancia realizada COP",
+                "Ganancia no realizada COP"
+            ],
+            var_name="Tipo de resultado",
+            value_name="Valor COP"
+        )
+
+        chart_df = chart_df.dropna()
+
+        if not chart_df.empty:
+            fig = px.bar(
+                chart_df,
+                x="Activo",
+                y="Valor COP",
+                color="Tipo de resultado",
+                barmode="group"
+            )
+
+            fig.update_layout(
+                paper_bgcolor="#080D16",
+                plot_bgcolor="#080D16",
+                font_color="white"
+            )
+
+            st.plotly_chart(
+                fig,
+                use_container_width=True
+            )
+
     else:
-        st.info("Registra inversiones para calcular la rentabilidad.")
+        st.info("Registra operaciones para consultar resultados.")
+
+    price_history = db.get_price_history()
 
     if price_history:
+        st.subheader("Historial de cotizaciones")
 
-        history = pd.DataFrame(price_history)
-        history["date"] = pd.to_datetime(history["date"])
-
-        st.markdown("#### Historial de precios guardados")
+        history_df = pd.DataFrame(price_history)
+        history_df["date"] = pd.to_datetime(history_df["date"])
 
         fig = px.line(
-            history,
+            history_df,
             x="date",
             y="price",
             color="asset_name",
@@ -1331,16 +1348,16 @@ with tabs[6]:
             hover_data=["source"]
         )
 
+        fig.update_layout(
+            paper_bgcolor="#080D16",
+            plot_bgcolor="#080D16",
+            font_color="white"
+        )
+
         st.plotly_chart(
             fig,
             use_container_width=True
         )
-
-    st.caption(
-        "La rentabilidad acumulada compara el resultado registrado "
-        "con las compras acumuladas. La XIRR es una estimación anualizada "
-        "basada en fechas y flujos de caja. No garantiza rendimientos futuros."
-    )
 
 
 # ============================================================
@@ -1348,14 +1365,14 @@ with tabs[6]:
 # ============================================================
 
 with tabs[7]:
-
     st.subheader("Historial de actividad")
 
     transactions = db.get_transactions()
 
     if transactions:
+        st.markdown("#### Compras y ventas")
 
-        transaction_table = pd.DataFrame([
+        transaction_df = pd.DataFrame([
             {
                 "Fecha": t["date"],
                 "Activo": t["asset_name"],
@@ -1369,19 +1386,16 @@ with tabs[7]:
             for t in transactions
         ])
 
-        st.markdown("#### Compras y ventas")
-
         st.dataframe(
-            transaction_table,
+            transaction_df,
             use_container_width=True,
             hide_index=True
         )
 
     else:
-        st.info("No hay operaciones registradas.")
+        st.info("No hay compras o ventas registradas.")
 
     if income_rows:
-
         st.markdown("#### Dividendos e intereses")
 
         st.dataframe(
@@ -1391,8 +1405,7 @@ with tabs[7]:
         )
 
     if price_history:
-
-        st.markdown("#### Actualizaciones de precios")
+        st.markdown("#### Cambios de cotizaciones")
 
         st.dataframe(
             pd.DataFrame(price_history),
@@ -1408,8 +1421,10 @@ with tabs[7]:
 st.divider()
 
 st.caption(
-    "MI PORTAFOLIO DE INVERSIÓN | Herramienta de seguimiento personal. "
-    "No ejecuta órdenes de compra o venta, no se conecta a tu cuenta Trii "
-    "y no constituye asesoría financiera. Verifica las tarifas y "
-    "comprobantes definitivos con tu intermediario."
+    "PORTAFOLIO DE INVERSIÓN · Herramienta de seguimiento personal. "
+    "No ejecuta órdenes de compra o venta. Los precios de Yahoo Finance "
+    "corresponden al último cierre disponible y no necesariamente son "
+    "precios en tiempo real. La TRM es la tasa oficial publicada para "
+    "su fecha de vigencia. Verifica comisiones, impuestos y cotizaciones "
+    "con tu intermediario."
 )

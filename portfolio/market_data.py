@@ -1,69 +1,52 @@
+from datetime import date
+from urllib.request import Request, urlopen
+from urllib.parse import urlencode
+import json
 
-from datetime import date, datetime
-
-import requests
+import yfinance as yf
 
 
 class MarketDataProvider:
-    """
-    Consulta dos fuentes:
-
-    1. TRM publicada en Datos Abiertos Colombia.
-    2. Último cierre disponible de Yahoo Finance.
-
-    Yahoo Finance no garantiza cotizaciones en tiempo real.
-    """
-
-    TRM_URL = (
-        "https://www.datos.gov.co/resource/32sa-8pi3.json"
-    )
+    """Consulta TRM oficial y precios de acciones disponibles."""
 
     def fetch_trm(self):
-        params = {
+        """
+        Consulta la TRM publicada por la Superintendencia Financiera
+        en el conjunto oficial de Datos Abiertos Colombia.
+        """
+        base_url = "https://www.datos.gov.co/resource/32sa-8pi3.json"
+
+        params = urlencode({
             "$select": "valor,vigenciadesde",
             "$order": "vigenciadesde DESC",
-            "$limit": "1",
-        }
+            "$limit": "1"
+        })
 
-        headers = {
-            "User-Agent": "PersonalPortfolioApp/1.0",
-            "Accept": "application/json",
-        }
+        url = f"{base_url}?{params}"
 
         try:
-            response = requests.get(
-                self.TRM_URL,
-                params=params,
-                headers=headers,
-                timeout=20,
+            request = Request(
+                url,
+                headers={"User-Agent": "PortfolioInversion/1.0"}
             )
 
-            response.raise_for_status()
-            rows = response.json()
+            with urlopen(request, timeout=15) as response:
+                data = json.loads(response.read().decode("utf-8"))
 
-            if not rows:
-                raise ValueError(
-                    "La fuente oficial no devolvió registros."
-                )
+            if not data:
+                raise ValueError("La fuente no devolvió datos de TRM.")
 
-            value = float(rows[0]["valor"])
-            raw_date = rows[0]["vigenciadesde"]
+            value = float(data[0]["valor"])
+            effective_date = str(data[0]["vigenciadesde"])[:10]
 
             if value <= 0:
                 raise ValueError("La TRM recibida no es válida.")
 
-            parsed = datetime.fromisoformat(
-                raw_date.replace("Z", "+00:00")
+            return (
+                value,
+                effective_date,
+                "Superintendencia Financiera - Datos Abiertos Colombia"
             )
-
-            return {
-                "value": value,
-                "date": parsed.date().isoformat(),
-                "source": (
-                    "Datos Abiertos Colombia; datos suministrados "
-                    "por la Superintendencia Financiera de Colombia"
-                ),
-            }
 
         except Exception as exc:
             raise RuntimeError(
@@ -71,66 +54,46 @@ class MarketDataProvider:
             ) from exc
 
     def fetch_yfinance_price(self, symbol):
-        """
-        Devuelve:
-        (precio, fuente, fecha_del_cierre)
-        """
+        """Consulta el último precio de cierre disponible en Yahoo Finance."""
+        symbol = str(symbol).strip().upper()
+
+        if not symbol:
+            raise ValueError("Debes indicar el símbolo de la acción.")
 
         try:
-            import yfinance as yf
-
-            ticker_symbol = str(symbol).strip().upper()
-
-            if not ticker_symbol:
-                raise ValueError(
-                    "Debes indicar un símbolo bursátil."
-                )
-
-            ticker = yf.Ticker(ticker_symbol)
+            ticker = yf.Ticker(symbol)
 
             history = ticker.history(
-                period="10d",
+                period="5d",
                 interval="1d",
-                auto_adjust=False,
-                actions=False,
+                auto_adjust=False
             )
 
-            if history is None or history.empty:
+            if history.empty or "Close" not in history:
                 raise ValueError(
-                    "Yahoo Finance no devolvió cotizaciones "
-                    "para ese símbolo."
+                    "Yahoo Finance no devolvió cotizaciones para este símbolo."
                 )
 
-            close_values = history["Close"].dropna()
+            close_prices = history["Close"].dropna()
 
-            if close_values.empty:
-                raise ValueError(
-                    "No hay precios de cierre disponibles."
-                )
+            if close_prices.empty:
+                raise ValueError("No hay precios de cierre disponibles.")
 
-            price = float(close_values.iloc[-1])
+            price = float(close_prices.iloc[-1])
+            quote_date = close_prices.index[-1].date().isoformat()
 
             if price <= 0:
-                raise ValueError(
-                    "La fuente devolvió un precio no válido."
-                )
+                raise ValueError("El precio recibido no es válido.")
 
-            quote_date = (
-                close_values.index[-1].date().isoformat()
+            return (
+                price,
+                "Yahoo Finance - último cierre disponible",
+                quote_date
             )
-
-            source = (
-                "Yahoo Finance (yfinance), último cierre "
-                f"disponible del {quote_date}; "
-                "no es una cotización en tiempo real"
-            )
-
-            return price, source, quote_date
 
         except Exception as exc:
             raise RuntimeError(
-                f"No fue posible consultar {symbol} "
-                f"en Yahoo Finance: {exc}"
+                f"No se pudo consultar {symbol} en Yahoo Finance: {exc}"
             ) from exc
 
     @staticmethod

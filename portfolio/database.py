@@ -1,69 +1,22 @@
-
 import sqlite3
-import math
-from datetime import date as date_class
-from contextlib import contextmanager
+from pathlib import Path
 
 
 class Database:
-    """Gestiona la base de datos SQLite del portafolio."""
+    """Administra la base de datos del portafolio."""
 
     def __init__(self, db_path="portfolio_data.db"):
         self.db_path = str(db_path)
         self.initialize()
 
     def connect(self):
-        connection = sqlite3.connect(self.db_path)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA foreign_keys = ON")
-        return connection
-
-    @contextmanager
-    def connection(self):
-        con = self.connect()
-        try:
-            yield con
-            con.commit()
-        except Exception:
-            con.rollback()
-            raise
-        finally:
-            con.close()
-
-    @staticmethod
-    def _number(value, field_name):
-        try:
-            number = float(value)
-        except (TypeError, ValueError):
-            raise ValueError(
-                f"El campo {field_name} debe ser numérico."
-            )
-
-        if not math.isfinite(number):
-            raise ValueError(
-                f"El campo {field_name} no es válido."
-            )
-
-        return number
-
-    @staticmethod
-    def _valid_date(value, field_name="fecha"):
-        try:
-            parsed = date_class.fromisoformat(str(value))
-        except (TypeError, ValueError):
-            raise ValueError(
-                f"El campo {field_name} debe tener formato AAAA-MM-DD."
-            )
-
-        if parsed.isoformat() != str(value):
-            raise ValueError(
-                f"El campo {field_name} debe tener formato AAAA-MM-DD."
-            )
-
-        return parsed
+        con = sqlite3.connect(self.db_path)
+        con.row_factory = sqlite3.Row
+        con.execute("PRAGMA foreign_keys = ON")
+        return con
 
     def initialize(self):
-        with self.connection() as con:
+        with self.connect() as con:
             con.executescript("""
                 CREATE TABLE IF NOT EXISTS assets (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -73,27 +26,26 @@ class Database:
                     currency TEXT NOT NULL,
                     market TEXT NOT NULL,
                     current_price REAL NOT NULL DEFAULT 0,
-                    source TEXT NOT NULL DEFAULT 'Manual'
+                    source TEXT NOT NULL DEFAULT 'Pendiente de cotización',
+                    price_date TEXT,
+                    price_status TEXT NOT NULL DEFAULT 'PENDIENTE'
                 );
 
                 CREATE TABLE IF NOT EXISTS transactions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     asset_id INTEGER NOT NULL,
-                    operation TEXT NOT NULL
-                        CHECK(operation IN ('COMPRA', 'VENTA')),
+                    operation TEXT NOT NULL CHECK(operation IN ('COMPRA','VENTA')),
                     date TEXT NOT NULL,
                     quantity REAL NOT NULL CHECK(quantity > 0),
                     price REAL NOT NULL CHECK(price >= 0),
-                    commission REAL NOT NULL DEFAULT 0
-                        CHECK(commission >= 0),
+                    commission REAL NOT NULL DEFAULT 0 CHECK(commission >= 0),
                     FOREIGN KEY(asset_id) REFERENCES assets(id)
                 );
 
                 CREATE TABLE IF NOT EXISTS income_events (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     asset_id INTEGER NOT NULL,
-                    event_type TEXT NOT NULL
-                        CHECK(event_type IN ('DIVIDENDO', 'INTERES')),
+                    event_type TEXT NOT NULL CHECK(event_type IN ('DIVIDENDO','INTERES')),
                     date TEXT NOT NULL,
                     amount REAL NOT NULL CHECK(amount >= 0),
                     description TEXT DEFAULT '',
@@ -128,454 +80,135 @@ class Database:
                 );
             """)
 
-            count = con.execute(
-                "SELECT COUNT(*) FROM assets"
-            ).fetchone()[0]
+            # Migración segura: agrega columnas si la base de datos ya existía.
+            columns = {
+                row["name"]
+                for row in con.execute("PRAGMA table_info(assets)").fetchall()
+            }
 
-            # Solo crea activos de ejemplo si la tabla está vacía.
-            # No elimina ni reemplaza activos existentes.
+            if "price_date" not in columns:
+                con.execute("ALTER TABLE assets ADD COLUMN price_date TEXT")
+
+            if "price_status" not in columns:
+                con.execute(
+                    "ALTER TABLE assets ADD COLUMN price_status "
+                    "TEXT NOT NULL DEFAULT 'PENDIENTE'"
+                )
+
+            count = con.execute("SELECT COUNT(*) FROM assets").fetchone()[0]
+
             if count == 0:
                 initial_assets = [
-                    (
-                        "Bancolombia",
-                        "BCOLOMBIA (manual)",
-                        "ACCION",
-                        "COP",
-                        "BVC",
-                        0,
-                        "Cotización local ingresada por el usuario"
-                    ),
-                    (
-                        "Amazon",
-                        "AMZN",
-                        "ACCION",
-                        "USD",
-                        "NASDAQ",
-                        0,
-                        "Yahoo Finance mediante yfinance"
-                    ),
-                    (
-                        "The Coca-Cola Company",
-                        "KO",
-                        "ACCION",
-                        "USD",
-                        "NYSE",
-                        0,
-                        "Yahoo Finance mediante yfinance"
-                    ),
-                    (
-                        "Nike",
-                        "NKE",
-                        "ACCION",
-                        "USD",
-                        "NYSE",
-                        0,
-                        "Yahoo Finance mediante yfinance"
-                    ),
-                    (
-                        "CDT de ejemplo",
-                        "CDT-001",
-                        "CDT",
-                        "COP",
-                        "Entidad financiera",
-                        0,
-                        "Datos contractuales ingresados por el usuario"
-                    ),
-                    (
-                        "Bono de ejemplo",
-                        "BONO-001",
-                        "BONO",
-                        "COP",
-                        "Mercado de deuda",
-                        0,
-                        "Datos contractuales ingresados por el usuario"
-                    ),
-                    (
-                        "TES de ejemplo",
-                        "TES-001",
-                        "TES",
-                        "COP",
-                        "Gobierno de Colombia",
-                        0,
-                        "Datos contractuales ingresados por el usuario"
-                    ),
+                    ("Bancolombia", "BCOLOMBIA", "ACCION", "COP", "BVC"),
+                    ("Amazon", "AMZN", "ACCION", "USD", "NASDAQ"),
+                    ("The Coca-Cola Company", "KO", "ACCION", "USD", "NYSE"),
+                    ("Nike", "NKE", "ACCION", "USD", "NYSE"),
+                    ("CDT de ejemplo", "CDT-001", "CDT", "COP", "Entidad financiera"),
+                    ("Bono de ejemplo", "BONO-001", "BONO", "COP", "Mercado de deuda"),
+                    ("TES de ejemplo", "TES-001", "TES", "COP", "Gobierno de Colombia"),
                 ]
 
                 con.executemany("""
-                    INSERT INTO assets (
-                        name,
-                        symbol,
-                        asset_type,
-                        currency,
-                        market,
-                        current_price,
-                        source
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO assets
+                    (name, symbol, asset_type, currency, market,
+                     current_price, source, price_status)
+                    VALUES (?, ?, ?, ?, ?, 0, 'Pendiente de cotización', 'PENDIENTE')
                 """, initial_assets)
 
     def get_assets(self):
-        with self.connection() as con:
-            rows = con.execute("""
-                SELECT *
-                FROM assets
-                ORDER BY id
-            """).fetchall()
-
-            return [dict(row) for row in rows]
-
-    def add_asset(
-        self,
-        name,
-        symbol,
-        asset_type,
-        currency,
-        market,
-        current_price=0,
-        source="Manual"
-    ):
-        name = str(name).strip()
-        symbol = str(symbol).strip().upper()
-        current_price = self._number(
-            current_price, "precio"
-        )
-
-        if not name or not symbol:
-            raise ValueError(
-                "El nombre y el símbolo son obligatorios."
-            )
-
-        if current_price < 0:
-            raise ValueError(
-                "El precio no puede ser negativo."
-            )
-
-        with self.connection() as con:
-            cursor = con.execute("""
-                INSERT INTO assets (
-                    name,
-                    symbol,
-                    asset_type,
-                    currency,
-                    market,
-                    current_price,
-                    source
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                name,
-                symbol,
-                asset_type,
-                currency,
-                market,
-                current_price,
-                source
-            ))
-
-            return cursor.lastrowid
-
-    def update_price(self, asset_id, price, source, date):
-        date = self._valid_date(date).isoformat()
-        price = self._number(price, "precio")
-
-        if price < 0:
-            raise ValueError(
-                "El precio no puede ser negativo."
-            )
-
-        with self.connection() as con:
-            cursor = con.execute("""
-                UPDATE assets
-                SET current_price = ?, source = ?
-                WHERE id = ?
-            """, (
-                price,
-                str(source),
-                int(asset_id)
-            ))
-
-            if cursor.rowcount == 0:
-                raise ValueError(
-                    "No se encontró el activo seleccionado."
-                )
-
-            con.execute("""
-                INSERT INTO price_history (
-                    asset_id,
-                    date,
-                    price,
-                    source
-                )
-                VALUES (?, ?, ?, ?)
-            """, (
-                int(asset_id),
-                date,
-                price,
-                str(source)
-            ))
-
-    def get_transactions_for_asset(self, asset_id):
-        with self.connection() as con:
-            rows = con.execute("""
-                SELECT *
-                FROM transactions
-                WHERE asset_id = ?
-                ORDER BY date, id
-            """, (int(asset_id),)).fetchall()
-
-            return [dict(row) for row in rows]
-
-    def add_transaction(
-        self,
-        asset_id,
-        operation,
-        date,
-        quantity,
-        price,
-        commission
-    ):
-        operation = str(operation).strip().upper()
-        transaction_date = self._valid_date(date)
-        date_text = transaction_date.isoformat()
-
-        quantity = self._number(quantity, "cantidad")
-        price = self._number(price, "precio")
-        commission = self._number(commission, "comisión")
-
-        if operation not in ("COMPRA", "VENTA"):
-            raise ValueError(
-                "La operación debe ser COMPRA o VENTA."
-            )
-
-        if quantity <= 0:
-            raise ValueError(
-                "La cantidad debe ser mayor que cero."
-            )
-
-        if price < 0 or commission < 0:
-            raise ValueError(
-                "El precio y la comisión no pueden ser negativos."
-            )
-
-        gross_value = quantity * price
-
-        if (
-            operation == "VENTA"
-            and commission > gross_value + 1e-9
-        ):
-            raise ValueError(
-                "La comisión de una venta no puede superar "
-                "el valor bruto."
-            )
-
-        try:
-            asset_id = int(asset_id)
-        except (TypeError, ValueError):
-            raise ValueError(
-                "El activo seleccionado no es válido."
-            )
-
-        with self.connection() as con:
-            asset = con.execute(
-                "SELECT id FROM assets WHERE id = ?",
-                (asset_id,)
-            ).fetchone()
-
-            if asset is None:
-                raise ValueError(
-                    "El activo seleccionado no existe."
-                )
-
-            # Recupera todas las operaciones del activo.
-            rows = con.execute("""
-                SELECT id, operation, date, quantity
-                FROM transactions
-                WHERE asset_id = ?
-            """, (asset_id,)).fetchall()
-
-            ledger = [
-                (
-                    str(row["date"]),
-                    int(row["id"]),
-                    row["operation"],
-                    float(row["quantity"])
-                )
-                for row in rows
+        with self.connect() as con:
+            return [
+                dict(row) for row in
+                con.execute("SELECT * FROM assets ORDER BY id").fetchall()
             ]
 
-            # La nueva operación se considera posterior a las
-            # operaciones ya registradas en la misma fecha.
-            ledger.append((
-                date_text,
-                float("inf"),
-                operation,
-                quantity
+    def add_asset(self, name, symbol, asset_type, currency, market,
+                  current_price=0, source="Pendiente de cotización"):
+        status = "DISPONIBLE" if float(current_price or 0) > 0 else "PENDIENTE"
+
+        with self.connect() as con:
+            con.execute("""
+                INSERT INTO assets
+                (name, symbol, asset_type, currency, market,
+                 current_price, source, price_status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                name, symbol, asset_type, currency, market,
+                float(current_price or 0), source, status
             ))
 
-            ledger.sort(
-                key=lambda item: (item[0], item[1])
-            )
+    def update_price(self, asset_id, price, source, date):
+        price = float(price)
 
-            available = 0.0
+        with self.connect() as con:
+            con.execute("""
+                UPDATE assets
+                SET current_price = ?, source = ?, price_date = ?,
+                    price_status = 'DISPONIBLE'
+                WHERE id = ?
+            """, (price, source, date, int(asset_id)))
 
-            # Recorre el historial en orden cronológico.
-            for _, _, ledger_operation, ledger_quantity in ledger:
-                if ledger_operation == "COMPRA":
-                    available += ledger_quantity
-                else:
-                    available -= ledger_quantity
+            con.execute("""
+                INSERT INTO price_history (asset_id, date, price, source)
+                VALUES (?, ?, ?, ?)
+            """, (int(asset_id), date, price, source))
 
-                if available < -1e-9:
-                    raise ValueError(
-                        "No puedes registrar una venta antes "
-                        "de tener las unidades disponibles "
-                        "en esa fecha."
-                    )
-
-            cursor = con.execute("""
-                INSERT INTO transactions (
-                    asset_id,
-                    operation,
-                    date,
-                    quantity,
-                    price,
-                    commission
-                )
+    def add_transaction(self, asset_id, operation, date,
+                        quantity, price, commission):
+        with self.connect() as con:
+            con.execute("""
+                INSERT INTO transactions
+                (asset_id, operation, date, quantity, price, commission)
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (
-                asset_id,
-                operation,
-                date_text,
-                quantity,
-                price,
-                commission
+                int(asset_id), operation, date, float(quantity),
+                float(price), float(commission)
             ))
 
-            return cursor.lastrowid
-
-    def add_income(
-        self,
-        asset_id,
-        event_type,
-        date,
-        amount,
-        description=""
-    ):
-        event_type = str(event_type).strip().upper()
-        date = self._valid_date(date).isoformat()
-        amount = self._number(
-            amount, "valor del ingreso"
-        )
-
-        if event_type not in ("DIVIDENDO", "INTERES"):
-            raise ValueError(
-                "El tipo de ingreso debe ser DIVIDENDO o INTERES."
-            )
-
-        if amount < 0:
-            raise ValueError(
-                "El ingreso no puede ser negativo."
-            )
-
-        with self.connection() as con:
-            cursor = con.execute("""
-                INSERT INTO income_events (
-                    asset_id,
-                    event_type,
-                    date,
-                    amount,
-                    description
-                )
+    def add_income(self, asset_id, event_type, date, amount, description=""):
+        with self.connect() as con:
+            con.execute("""
+                INSERT INTO income_events
+                (asset_id, event_type, date, amount, description)
                 VALUES (?, ?, ?, ?, ?)
-            """, (
-                int(asset_id),
-                event_type,
-                date,
-                amount,
-                str(description)
-            ))
-
-            return cursor.lastrowid
+            """, (int(asset_id), event_type, date, float(amount), description))
 
     def get_transactions(self):
-        with self.connection() as con:
-            rows = con.execute("""
-                SELECT
-                    t.*,
-                    a.name AS asset_name,
-                    a.currency
+        with self.connect() as con:
+            return [dict(r) for r in con.execute("""
+                SELECT t.*, a.name AS asset_name, a.currency
                 FROM transactions t
                 JOIN assets a ON a.id = t.asset_id
                 ORDER BY t.date, t.id
-            """).fetchall()
-
-            return [dict(row) for row in rows]
+            """).fetchall()]
 
     def get_income_events(self):
-        with self.connection() as con:
-            rows = con.execute("""
-                SELECT
-                    e.*,
-                    a.name AS asset_name,
-                    a.currency
+        with self.connect() as con:
+            return [dict(r) for r in con.execute("""
+                SELECT e.*, a.name AS asset_name, a.currency
                 FROM income_events e
                 JOIN assets a ON a.id = e.asset_id
                 ORDER BY e.date, e.id
-            """).fetchall()
-
-            return [dict(row) for row in rows]
+            """).fetchall()]
 
     def get_price_history(self):
-        with self.connection() as con:
-            rows = con.execute("""
-                SELECT
-                    p.*,
-                    a.name AS asset_name
+        with self.connect() as con:
+            return [dict(r) for r in con.execute("""
+                SELECT p.*, a.name AS asset_name
                 FROM price_history p
                 JOIN assets a ON a.id = p.asset_id
                 ORDER BY p.date, p.id
-            """).fetchall()
-
-            return [dict(row) for row in rows]
+            """).fetchall()]
 
     def save_fixed_income_terms(
-        self,
-        asset_id,
-        annual_rate_pct,
-        rate_type,
-        issue_date,
-        maturity_date,
-        payment_frequency,
-        nominal_value,
-        notes=""
+        self, asset_id, annual_rate_pct, rate_type, issue_date,
+        maturity_date, payment_frequency, nominal_value, notes=""
     ):
-        annual_rate_pct = self._number(
-            annual_rate_pct,
-            "tasa anual"
-        )
-
-        nominal_value = self._number(
-            nominal_value,
-            "valor nominal"
-        )
-
-        if annual_rate_pct < 0 or nominal_value < 0:
-            raise ValueError(
-                "La tasa y el valor nominal no pueden ser negativos."
-            )
-
-        with self.connection() as con:
+        with self.connect() as con:
             con.execute("""
-                INSERT INTO fixed_income_terms (
-                    asset_id,
-                    annual_rate_pct,
-                    rate_type,
-                    issue_date,
-                    maturity_date,
-                    payment_frequency,
-                    nominal_value,
-                    notes
-                )
+                INSERT INTO fixed_income_terms
+                (asset_id, annual_rate_pct, rate_type, issue_date,
+                 maturity_date, payment_frequency, nominal_value, notes)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(asset_id) DO UPDATE SET
                     annual_rate_pct = excluded.annual_rate_pct,
@@ -586,62 +219,33 @@ class Database:
                     nominal_value = excluded.nominal_value,
                     notes = excluded.notes
             """, (
-                int(asset_id),
-                annual_rate_pct,
-                str(rate_type),
-                str(issue_date),
-                str(maturity_date),
-                str(payment_frequency),
-                nominal_value,
-                str(notes)
+                asset_id, annual_rate_pct, rate_type, issue_date,
+                maturity_date, payment_frequency, nominal_value, notes
             ))
 
     def get_fixed_income_terms(self):
-        with self.connection() as con:
-            rows = con.execute("""
-                SELECT
-                    f.*,
-                    a.name AS asset_name,
-                    a.asset_type
+        with self.connect() as con:
+            return [dict(r) for r in con.execute("""
+                SELECT f.*, a.name AS asset_name, a.asset_type
                 FROM fixed_income_terms f
                 JOIN assets a ON a.id = f.asset_id
                 ORDER BY a.name
-            """).fetchall()
-
-            return [dict(row) for row in rows]
+            """).fetchall()]
 
     def get_fee_settings(self):
-        with self.connection() as con:
-            rows = con.execute("""
-                SELECT asset_id, fee_pct
-                FROM asset_fee_settings
-            """).fetchall()
-
+        with self.connect() as con:
             return {
-                int(row["asset_id"]): float(row["fee_pct"])
-                for row in rows
+                int(r["asset_id"]): float(r["fee_pct"])
+                for r in con.execute(
+                    "SELECT asset_id, fee_pct FROM asset_fee_settings"
+                ).fetchall()
             }
 
     def save_fee_setting(self, asset_id, fee_pct):
-        fee_pct = self._number(
-            fee_pct, "comisión"
-        )
-
-        if fee_pct < 0:
-            raise ValueError(
-                "La comisión no puede ser negativa."
-            )
-
-        with self.connection() as con:
+        with self.connect() as con:
             con.execute("""
-                INSERT INTO asset_fee_settings (
-                    asset_id,
-                    fee_pct
-                )
+                INSERT INTO asset_fee_settings (asset_id, fee_pct)
                 VALUES (?, ?)
                 ON CONFLICT(asset_id) DO UPDATE SET
                     fee_pct = excluded.fee_pct
-            """, (
-                int(asset_id),
-                fee_pct
-            ))
+            """, (int(asset_id), float(fee_pct)))
