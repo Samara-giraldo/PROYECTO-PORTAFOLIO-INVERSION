@@ -1,104 +1,138 @@
-from datetime import date
+
+from datetime import date, datetime
+
 import requests
 
 
 class MarketDataProvider:
     """
-    Fuentes de consulta:
-    - Yahoo Finance: último cierre disponible para símbolos compatibles.
-    - Datos Abiertos Colombia: TRM publicada por la Superintendencia Financiera.
+    Consulta dos fuentes:
 
-    Los precios pueden tener retraso. No son precios de ejecución de Trii.
+    1. TRM publicada en Datos Abiertos Colombia.
+    2. Último cierre disponible de Yahoo Finance.
+
+    Yahoo Finance no garantiza cotizaciones en tiempo real.
     """
 
-    TRM_URL = "https://www.datos.gov.co/resource/32sa-8pi3.json"
-
-    def __init__(self, timeout=15):
-        self.timeout = timeout
-        self.session = requests.Session()
-        self.session.headers.update({
-            "User-Agent": "PortfolioPersonal/1.0"
-        })
-
-    @staticmethod
-    def today():
-        return date.today().isoformat()
-
-    def fetch_yfinance_price(self, symbol):
-        try:
-            import yfinance as yf
-
-            ticker = yf.Ticker(str(symbol).strip().upper())
-            history = ticker.history(
-                period="5d",
-                interval="1d",
-                auto_adjust=False
-            )
-
-            if history.empty or "Close" not in history:
-                raise ValueError("Yahoo Finance no devolvió precios.")
-
-            closes = history["Close"].dropna()
-
-            if closes.empty:
-                raise ValueError("No hay cierres disponibles.")
-
-            price = float(closes.iloc[-1])
-            quote_date = closes.index[-1].date().isoformat()
-
-            if price <= 0:
-                raise ValueError("El precio recibido no es válido.")
-
-            source = (
-                f"Yahoo Finance - último cierre disponible "
-                f"({quote_date}); puede tener retraso"
-            )
-
-            return price, source
-
-        except Exception as exc:
-            raise RuntimeError(
-                f"No fue posible consultar {symbol} en Yahoo Finance: {exc}"
-            ) from exc
+    TRM_URL = (
+        "https://www.datos.gov.co/resource/32sa-8pi3.json"
+    )
 
     def fetch_trm(self):
-        """
-        Consulta la TRM más reciente publicada en el conjunto oficial
-        de datos abiertos de Colombia.
-        """
-        try:
-            params = {
-                "$select": "valor,vigenciadesde",
-                "$order": "vigenciadesde DESC",
-                "$limit": "1"
-            }
+        params = {
+            "$select": "valor,vigenciadesde",
+            "$order": "vigenciadesde DESC",
+            "$limit": "1",
+        }
 
-            response = self.session.get(
+        headers = {
+            "User-Agent": "PersonalPortfolioApp/1.0",
+            "Accept": "application/json",
+        }
+
+        try:
+            response = requests.get(
                 self.TRM_URL,
                 params=params,
-                timeout=self.timeout
+                headers=headers,
+                timeout=20,
             )
-            response.raise_for_status()
 
+            response.raise_for_status()
             rows = response.json()
 
             if not rows:
-                raise ValueError("La fuente oficial no devolvió registros.")
+                raise ValueError(
+                    "La fuente oficial no devolvió registros."
+                )
 
-            row = rows[0]
-            value = float(str(row["valor"]).replace(",", "."))
-            valid_from = str(row["vigenciadesde"])[:10]
+            value = float(rows[0]["valor"])
+            raw_date = rows[0]["vigenciadesde"]
 
             if value <= 0:
                 raise ValueError("La TRM recibida no es válida.")
 
+            parsed = datetime.fromisoformat(
+                raw_date.replace("Z", "+00:00")
+            )
+
             return {
                 "value": value,
-                "date": valid_from,
-                "source": "Datos Abiertos Colombia - Superintendencia Financiera"
+                "date": parsed.date().isoformat(),
+                "source": (
+                    "Datos Abiertos Colombia; datos suministrados "
+                    "por la Superintendencia Financiera de Colombia"
+                ),
             }
 
         except Exception as exc:
             raise RuntimeError(
                 f"No fue posible consultar la TRM oficial: {exc}"
             ) from exc
+
+    def fetch_yfinance_price(self, symbol):
+        """
+        Devuelve:
+        (precio, fuente, fecha_del_cierre)
+        """
+
+        try:
+            import yfinance as yf
+
+            ticker_symbol = str(symbol).strip().upper()
+
+            if not ticker_symbol:
+                raise ValueError(
+                    "Debes indicar un símbolo bursátil."
+                )
+
+            ticker = yf.Ticker(ticker_symbol)
+
+            history = ticker.history(
+                period="10d",
+                interval="1d",
+                auto_adjust=False,
+                actions=False,
+            )
+
+            if history is None or history.empty:
+                raise ValueError(
+                    "Yahoo Finance no devolvió cotizaciones "
+                    "para ese símbolo."
+                )
+
+            close_values = history["Close"].dropna()
+
+            if close_values.empty:
+                raise ValueError(
+                    "No hay precios de cierre disponibles."
+                )
+
+            price = float(close_values.iloc[-1])
+
+            if price <= 0:
+                raise ValueError(
+                    "La fuente devolvió un precio no válido."
+                )
+
+            quote_date = (
+                close_values.index[-1].date().isoformat()
+            )
+
+            source = (
+                "Yahoo Finance (yfinance), último cierre "
+                f"disponible del {quote_date}; "
+                "no es una cotización en tiempo real"
+            )
+
+            return price, source, quote_date
+
+        except Exception as exc:
+            raise RuntimeError(
+                f"No fue posible consultar {symbol} "
+                f"en Yahoo Finance: {exc}"
+            ) from exc
+
+    @staticmethod
+    def today():
+        return date.today().isoformat()

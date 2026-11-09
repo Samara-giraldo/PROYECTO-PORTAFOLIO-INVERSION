@@ -1,3 +1,4 @@
+
 from datetime import date
 
 
@@ -15,7 +16,7 @@ class PortfolioService:
         for asset in assets:
             rows = [
                 tx for tx in transactions
-                if tx["asset_id"] == asset["id"]
+                if int(tx["asset_id"]) == int(asset["id"])
             ]
 
             quantity = 0.0
@@ -42,7 +43,8 @@ class PortfolioService:
                         )
 
                     average_cost = (
-                        remaining_cost / quantity if quantity > 0 else 0.0
+                        remaining_cost / quantity
+                        if quantity > 0 else 0.0
                     )
 
                     cost_sold = average_cost * q
@@ -56,7 +58,10 @@ class PortfolioService:
                         quantity = 0.0
                         remaining_cost = 0.0
 
-            market_value = quantity * float(asset["current_price"])
+            market_value = (
+                quantity * float(asset["current_price"])
+            )
+
             unrealized = market_value - remaining_cost
 
             result.append({
@@ -78,28 +83,47 @@ class PortfolioService:
         Calcula una tasa anualizada aproximada mediante bisección.
         Cada flujo debe ser una tupla (fecha, valor).
         """
-        flows = [
-            (d, float(v))
-            for d, v in flows
-            if abs(float(v)) > 1e-10
-        ]
+        clean_flows = []
+
+        for flow_date, value in flows:
+            if isinstance(flow_date, str):
+                try:
+                    flow_date = date.fromisoformat(flow_date)
+                except ValueError:
+                    raise ValueError(
+                        "Hay una fecha inválida en los flujos."
+                    )
+
+            numeric_value = float(value)
+
+            if abs(numeric_value) > 1e-10:
+                clean_flows.append(
+                    (flow_date, numeric_value)
+                )
+
+        flows = clean_flows
 
         if not flows:
             return None
 
-        if not any(v < 0 for _, v in flows):
+        if not any(value < 0 for _, value in flows):
             return None
 
-        if not any(v > 0 for _, v in flows):
+        if not any(value > 0 for _, value in flows):
             return None
 
-        start = min(d for d, _ in flows)
+        start = min(
+            flow_date for flow_date, _ in flows
+        )
 
         def npv(rate):
             total = 0.0
 
-            for day, value in flows:
-                years = (day - start).days / 365.0
+            for flow_date, value in flows:
+                years = (
+                    (flow_date - start).days / 365.0
+                )
+
                 total += value / ((1 + rate) ** years)
 
             return total
@@ -132,22 +156,89 @@ class PortfolioService:
 
         return (low + high) / 2
 
-    def summary(self, usd_cop, valuation_date=None):
-        if usd_cop is None or float(usd_cop) <= 0:
-            raise ValueError("Debes proporcionar una TRM válida.")
+    def summary(self, usd_cop=None, valuation_date=None):
+        """
+        Resume el portafolio en COP.
 
-        usd_cop = float(usd_cop)
+        Si existen operaciones, ingresos o posiciones en USD,
+        exige una TRM real suministrada por la aplicación.
+        No inventa una tasa de cambio.
+        """
+        if isinstance(valuation_date, str):
+            try:
+                valuation_date = date.fromisoformat(
+                    valuation_date
+                )
+            except ValueError:
+                raise ValueError(
+                    "La fecha de valoración debe tener "
+                    "formato AAAA-MM-DD."
+                )
+
         valuation_date = valuation_date or date.today()
+
+        if usd_cop is not None:
+            try:
+                usd_cop = float(usd_cop)
+            except (TypeError, ValueError):
+                raise ValueError(
+                    "Debes proporcionar una TRM numérica válida."
+                )
+
+            if usd_cop <= 0:
+                raise ValueError(
+                    "Debes proporcionar una TRM válida."
+                )
 
         positions = self.positions()
         incomes = self.db.get_income_events()
         transactions = self.db.get_transactions()
 
-        def fx(currency):
-            return usd_cop if currency == "USD" else 1.0
+        has_usd_activity = (
+            any(
+                tx["currency"] == "USD"
+                for tx in transactions
+            )
+            or any(
+                event["currency"] == "USD"
+                for event in incomes
+            )
+            or any(
+                p["currency"] == "USD"
+                and (
+                    abs(float(p["quantity"])) > 1e-9
+                    or abs(float(p["market_value"])) > 1e-9
+                    or abs(float(p["remaining_cost"])) > 1e-9
+                )
+                for p in positions
+            )
+        )
 
-        invested = sum(
+        if has_usd_activity and usd_cop is None:
+            raise ValueError(
+                "Hay movimientos o posiciones en USD. "
+                "Actualiza la TRM antes de calcular el resumen."
+            )
+
+        def fx(currency):
+            if currency == "USD":
+                return (
+                    usd_cop
+                    if usd_cop is not None
+                    else 1.0
+                )
+
+            return 1.0
+
+        # Total histórico de compras, incluyendo comisiones.
+        accumulated_purchases = sum(
             p["total_buys"] * fx(p["currency"])
+            for p in positions
+        )
+
+        # Costo de las unidades que todavía permanecen en cartera.
+        open_cost = sum(
+            p["remaining_cost"] * fx(p["currency"])
             for p in positions
         )
 
@@ -167,20 +258,25 @@ class PortfolioService:
         )
 
         income_total = sum(
-            e["amount"] * fx(e["currency"])
-            for e in incomes
+            event["amount"] * fx(event["currency"])
+            for event in incomes
         )
 
         fees = sum(
-            t["commission"] * fx(t["currency"])
-            for t in transactions
+            tx["commission"] * fx(tx["currency"])
+            for tx in transactions
         )
 
-        profit = realized + unrealized + income_total
+        profit = (
+            realized
+            + unrealized
+            + income_total
+        )
 
         accumulated = (
-            profit / invested * 100
-            if invested > 0 else None
+            profit / accumulated_purchases * 100
+            if accumulated_purchases > 0
+            else None
         )
 
         fixed = sum(
@@ -201,7 +297,12 @@ class PortfolioService:
 
         for tx in transactions:
             tx_date = date.fromisoformat(tx["date"])
-            gross = float(tx["quantity"]) * float(tx["price"])
+
+            gross = (
+                float(tx["quantity"])
+                * float(tx["price"])
+            )
+
             commission = float(tx["commission"])
 
             if tx["operation"] == "COMPRA":
@@ -220,12 +321,17 @@ class PortfolioService:
                 float(event["amount"]) * fx(event["currency"])
             ))
 
-        flows.append((valuation_date, market_value))
+        flows.append((
+            valuation_date,
+            market_value
+        ))
 
         tir = self.xirr(flows)
 
         return {
-            "invested": invested,
+            "invested": accumulated_purchases,
+            "accumulated_purchases": accumulated_purchases,
+            "open_cost": open_cost,
             "market_value": market_value,
             "realized": realized,
             "unrealized": unrealized,
@@ -233,10 +339,22 @@ class PortfolioService:
             "fees": fees,
             "profit": profit,
             "accumulated_pct": accumulated,
-            "xirr_pct": tir * 100 if tir is not None else None,
+            "xirr_pct": (
+                tir * 100
+                if tir is not None
+                else None
+            ),
             "fixed_value": fixed,
             "variable_value": variable,
-            "fixed_pct": fixed / total_market * 100 if total_market else 0,
-            "variable_pct": variable / total_market * 100 if total_market else 0,
+            "fixed_pct": (
+                fixed / total_market * 100
+                if total_market
+                else 0
+            ),
+            "variable_pct": (
+                variable / total_market * 100
+                if total_market
+                else 0
+            ),
             "positions": positions
         }

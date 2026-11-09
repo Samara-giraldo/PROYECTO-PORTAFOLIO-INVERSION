@@ -4,6 +4,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+px.defaults.template = 'plotly_dark'
+
 from portfolio.database import Database
 from portfolio.portfolio_service import PortfolioService
 from portfolio.market_data import MarketDataProvider
@@ -19,74 +21,38 @@ st.set_page_config(
     layout="wide"
 )
 
-st.markdown("""
-<style>
+st.markdown(r"""<style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap');
-
-html, body, [class*="css"] {
-    font-family: 'DM Sans', sans-serif;
-}
-
-.stApp {
-    background: #F3F6FB;
-    color: #17233D;
-}
-
-.block-container {
-    max-width: 1500px;
-    padding-top: 1.5rem;
-    padding-bottom: 2rem;
-}
-
-h1, h2, h3 {
-    color: #101B35;
-    font-weight: 800;
-}
-
-div[data-testid="stMetric"] {
-    background: white;
-    border: 1px solid #E6EBF3;
-    border-radius: 14px;
-    padding: 16px;
-}
-
-div.stButton > button,
-div.stFormSubmitButton > button {
-    background: #246BFD;
-    color: white;
-    border: 0;
-    border-radius: 9px;
-    min-height: 40px;
-    font-weight: 700;
-}
-
-.hero {
-    background: linear-gradient(115deg, #101B35, #1B3767, #246BFD);
-    padding: 26px 30px;
-    border-radius: 18px;
-    color: white;
-    margin-bottom: 20px;
-}
-
-.hero h1 {
-    color: white;
-    margin: 0;
-}
-
-.hero p {
-    color: #D7E2F6;
-    margin-bottom: 0;
-}
-
-section[data-testid="stSidebar"] {
-    background: #101B35;
-}
-
-section[data-testid="stSidebar"] * {
-    color: white;
-}
-</style>
-""", unsafe_allow_html=True)
+:root{color-scheme:dark;--bg:#080d0b;--panel:#121b17;--border:#2b3b32;--white:#f4f7f5;--muted:#b7c5bc;--green:#35d07f;}
+html,body,[class*='css'],[data-testid='stAppViewContainer']{font-family:'DM Sans',sans-serif!important;}
+.stApp,[data-testid='stAppViewContainer'],[data-testid='stMain']{background:var(--bg)!important;color:var(--white)!important;}
+.block-container{max-width:1500px;padding-top:1.5rem;padding-bottom:2rem;}
+[data-testid='stMain'] *{color:var(--white);}
+h1,h2,h3,h4,h5,h6,p,label,li,span,small,.stMarkdown{color:var(--white);}
+[data-testid='stCaptionContainer'] p,.stCaption,small{color:var(--muted)!important;}
+.hero{background:linear-gradient(115deg,#101713,#173b29,#146b3c);border:1px solid #2c8b58;padding:26px 30px;border-radius:18px;margin-bottom:20px;}
+.hero h1,.hero p,.hero *{color:#fff!important;}
+section[data-testid='stSidebar'],section[data-testid='stSidebar']>div{background:#0c1410!important;border-right:1px solid var(--border);}
+section[data-testid='stSidebar'] *{color:var(--white)!important;}
+div[data-testid='stMetric'],[data-testid='metric-container']{background:var(--panel)!important;border:1px solid var(--border)!important;border-radius:14px!important;padding:16px!important;}
+div[data-testid='stMetric'] label,div[data-testid='stMetric'] label *,div[data-testid='stMetricValue'],div[data-testid='stMetricValue'] *,div[data-testid='stMetricDelta'] *{color:var(--white)!important;opacity:1!important;}
+div[data-testid='stMetricValue']{font-size:clamp(1.2rem,2vw,2rem)!important;overflow-wrap:anywhere!important;}
+button[data-baseweb='tab'],button[data-baseweb='tab'] *{color:#d7e4dc!important;background:transparent!important;}
+button[data-baseweb='tab'][aria-selected='true']{border-bottom:3px solid var(--green)!important;}
+button[data-baseweb='tab'][aria-selected='true'] *{color:var(--green)!important;font-weight:700!important;}
+div.stButton>button,div.stFormSubmitButton>button,button[kind='primary']{background:#16834b!important;color:#fff!important;border:1px solid var(--green)!important;border-radius:10px!important;min-height:40px;font-weight:700!important;}
+div.stButton>button *,div.stFormSubmitButton>button *{color:#fff!important;}
+input,textarea,div[data-baseweb='input'] input,div[data-baseweb='textarea'] textarea{background:#18231d!important;color:#fff!important;-webkit-text-fill-color:#fff!important;border-color:#405348!important;}
+div[data-baseweb='select']>div{background:#18231d!important;color:#fff!important;border-color:#405348!important;}
+div[data-baseweb='select'] span,div[data-baseweb='select'] input,div[data-baseweb='select'] div{color:#fff!important;}
+[role='listbox'],[role='option'],[data-baseweb='popover'],[data-baseweb='menu']{background:#18231d!important;color:#fff!important;}
+[role='option'] *{color:#fff!important;}
+[data-testid='stDataFrame'],[data-testid='stTable']{background:var(--panel)!important;border:1px solid var(--border)!important;border-radius:10px!important;}
+[data-testid='stDataFrame'] *{color:var(--white)!important;}
+[data-testid='stForm'],[data-testid='stExpander']{background:var(--panel)!important;border:1px solid var(--border)!important;border-radius:12px!important;}
+hr{border-color:var(--border)!important;}[data-testid='stAlert'] *{color:var(--white)!important;}
+.stApp a{color:#65e69d!important;}::placeholder{color:#a9b8af!important;opacity:1!important;}
+</style>""", unsafe_allow_html=True)
 
 
 db = Database()
@@ -102,9 +68,11 @@ def money(value, currency="COP"):
     value = float(value or 0)
 
     if currency == "USD":
-        return f"US$ {value:,.2f}"
+        number = f"{value:,.2f}"
+        number = number.replace(",", "X").replace(".", ",").replace("X", ".")
+        return f"US$ {number}"
 
-    return f"$ {value:,.0f} COP"
+    return f"$ {value:,.0f} COP".replace(",", ".")
 
 
 def percent(value):
@@ -557,7 +525,7 @@ with tabs[1]:
 
         b.metric(
             "Cantidad",
-            f'{p["quantity"]:,.6f}'
+            f'{p["quantity"]:,.0f}'
         )
 
         c.metric(
@@ -574,9 +542,9 @@ with tabs[1]:
         st.divider()
 
         if selected["currency"] == "USD":
-            if st.button("Actualizar último cierre desde Yahoo Finance"):
+            if st.button("Actualizar último cierre disponible desde Yahoo Finance"):
                 try:
-                    price, source = market.fetch_yfinance_price(
+                    price, source, quote_date = market.fetch_yfinance_price(
                         selected["symbol"]
                     )
 
@@ -584,7 +552,7 @@ with tabs[1]:
                         selected["id"],
                         price,
                         source,
-                        market.today()
+                        quote_date
                     )
 
                     st.success("Precio actualizado.")
@@ -634,183 +602,241 @@ with tabs[1]:
 
     st.divider()
 
-    with st.expander("Agregar una acción"):
-
-        with st.form("add_stock_form"):
-
-            company = st.text_input("Nombre de la empresa")
-            symbol = st.text_input("Símbolo bursátil")
-            currency = st.selectbox(
-                "Moneda",
-                ["COP", "USD"]
-            )
-            stock_market = st.text_input(
-                "Mercado",
-                value="BVC" if currency == "COP" else "NASDAQ"
-            )
-            initial_price = st.number_input(
-                "Precio inicial",
-                min_value=0.0,
-                value=0.0
-            )
-
-            if st.form_submit_button("Agregar acción"):
-
-                symbol = symbol.strip().upper()
-
-                if not company.strip() or not symbol:
-                    st.error("Completa el nombre y el símbolo.")
-
-                elif any(
-                    a["symbol"].upper() == symbol
-                    for a in assets
-                ):
-                    st.error("Ese símbolo ya existe.")
-
-                else:
-                    db.add_asset(
-                        company.strip(),
-                        symbol,
-                        "ACCION",
-                        currency,
-                        stock_market.strip() or "Manual",
-                        initial_price,
-                        "Precio inicial ingresado por el usuario"
-                    )
-
-                    st.success("Acción agregada.")
-                    st.rerun()
-
-
-# ============================================================
 # 3. COMPRA Y VENTA
 # ============================================================
 
 with tabs[2]:
 
-    st.subheader("Registrar una operación")
+    st.subheader("Registrar una compra o una venta")
+    st.write(
+        "Registra aquí una operación que ya realizaste en Trii. "
+        "Esta aplicación lleva tus cuentas, pero no ejecuta órdenes."
+    )
 
-    if stocks:
+    NEW_COMPANY = "➕ Es mi primera compra de esta empresa"
+    options = [asset_label(a) for a in stocks]
 
-        with st.form("trade_form"):
+    choice = st.selectbox(
+        "¿Qué empresa compraste o vendiste?",
+        [NEW_COMPANY] + options,
+        key="trade_company_choice"
+    )
 
-            selected = st.selectbox(
-                "Acción",
-                stocks,
-                format_func=asset_label
+    is_new = choice == NEW_COMPANY
+    selected = None
+
+    if is_new:
+        st.info(
+            "Si la empresa todavía no aparece, regístrala aquí. "
+            "Su primera compra quedará guardada al mismo tiempo."
+        )
+
+        c1, c2 = st.columns(2)
+
+        with c1:
+            company_name = st.text_input(
+                "Nombre de la empresa",
+                placeholder="Ej. Apple",
+                key="new_trade_company"
             )
 
-            operation = st.radio(
-                "Operación",
-                ["COMPRA", "VENTA"],
-                horizontal=True
+            company_symbol = st.text_input(
+                "Símbolo bursátil",
+                placeholder="Ej. AAPL",
+                key="new_trade_symbol"
+            ).strip().upper()
+
+        with c2:
+            company_currency = st.selectbox(
+                "Moneda",
+                ["COP", "USD"],
+                key="new_trade_currency"
             )
 
-            trade_date = st.date_input(
-                "Fecha de operación",
-                value=date.today()
+            default_market = (
+                "BVC" if company_currency == "COP" else "NASDAQ"
             )
 
-            quantity = st.number_input(
-                "Cantidad de acciones",
-                min_value=0.000001,
-                value=1.0,
-                step=1.0,
-                format="%.6f"
+            company_market = st.text_input(
+                "Bolsa o mercado",
+                value=default_market,
+                key="new_trade_market"
             )
-
-            price = st.number_input(
-                f'Precio por acción ({selected["currency"]})',
-                min_value=0.0,
-                value=float(selected["current_price"]),
-                step=1.0
-            )
-
-            gross = quantity * price
-
-            if selected["currency"] == "COP":
-                commission = trii_standard_commission(gross)
-
-                st.info(
-                    f"Comisión Trii estándar estimada: "
-                    f"{money(commission)}"
-                )
-
-            else:
-                commission = st.number_input(
-                    "Comisión total de la operación en USD",
-                    min_value=0.0,
-                    value=0.0,
-                    step=0.01
-                )
-
-                st.caption(
-                    "Ingresa el cobro que corresponda a tu operación "
-                    "internacional. No se aplica la tarifa BVC."
-                )
-
-            if operation == "COMPRA":
-                total = gross + commission
-                st.write(
-                    f"Total estimado de compra: "
-                    f"{money(total, selected['currency'])}"
-                )
-            else:
-                net = gross - commission
-                st.write(
-                    f"Valor neto estimado de venta: "
-                    f"{money(net, selected['currency'])}"
-                )
-
-            confirmed = st.checkbox(
-                "Confirmo que los datos corresponden a mi operación real."
-            )
-
-            submitted = st.form_submit_button(
-                "Guardar operación"
-            )
-
-            if submitted:
-
-                current_position = position_by_id[selected["id"]]
-
-                if not confirmed:
-                    st.error("Debes confirmar la operación.")
-
-                elif quantity <= 0 or price <= 0:
-                    st.error("La cantidad y el precio deben ser positivos.")
-
-                elif (
-                    operation == "VENTA"
-                    and quantity > current_position["quantity"] + 1e-9
-                ):
-                    st.error(
-                        "No tienes suficientes acciones para esa venta. "
-                        f"Disponibles: {current_position['quantity']:.6f}"
-                    )
-
-                else:
-                    try:
-                        db.add_transaction(
-                            selected["id"],
-                            operation,
-                            trade_date.isoformat(),
-                            quantity,
-                            price,
-                            commission
-                        )
-
-                        st.success("Operación registrada.")
-                        st.rerun()
-
-                    except Exception as exc:
-                        st.error(str(exc))
 
     else:
-        st.info("Agrega una acción antes de registrar operaciones.")
+        selected = next(
+            a for a in stocks if asset_label(a) == choice
+        )
+
+        company_currency = selected["currency"]
+
+        st.caption(
+            f"Empresa seleccionada: "
+            f"**{selected['name']} ({selected['symbol']})**"
+        )
+
+    st.divider()
+
+    operation = st.radio(
+        "¿Qué hiciste?",
+        ["COMPRA", "VENTA"],
+        horizontal=True,
+        format_func=lambda x: (
+            "Compré acciones" if x == "COMPRA" else "Vendí acciones"
+        ),
+        key="trade_operation"
+    )
+
+    left, right = st.columns(2)
+
+    with left:
+        trade_date = st.date_input(
+            "Fecha de la operación",
+            value=date.today(),
+            key="trade_date_simple"
+        )
+
+        quantity = st.number_input(
+            "Cantidad de acciones",
+            min_value=1,
+            value=1,
+            step=1,
+            format="%d",
+            help="Escribe unidades enteras: por ejemplo, 2."
+        )
+
+    default_price = (
+        0.0 if is_new else float(selected["current_price"] or 0)
+    )
+
+    with right:
+        price = st.number_input(
+            f"Precio unitario: cuánto costó UNA acción ({company_currency})",
+            min_value=0.0,
+            value=default_price,
+            step=1.0 if company_currency == "COP" else 0.01,
+            format="%.0f" if company_currency == "COP" else "%.2f",
+            help="Copia el precio de una sola acción de tu comprobante."
+        )
+
+    gross = int(quantity) * float(price)
+
+    if company_currency == "COP":
+        commission = trii_standard_commission(gross)
+
+        st.caption(
+            "Comisión estimada con la tarifa estándar de Trii. "
+            "Comprueba el cobro definitivo en tu comprobante."
+        )
+
+    else:
+        commission = st.number_input(
+            "Comisión de esta operación (USD)",
+            min_value=0.0,
+            value=0.0,
+            step=0.01,
+            format="%.2f"
+        )
+
+    total = (
+        gross + commission
+        if operation == "COMPRA"
+        else gross - commission
+    )
+
+    st.markdown("#### Resumen antes de guardar")
+
+    a, b, c = st.columns(3)
+
+    a.metric("Cantidad", f"{int(quantity)} acciones")
+    a.metric("Precio por acción", money(price, company_currency))
+
+    b.metric("Valor de las acciones", money(gross, company_currency))
+    b.metric("Comisión estimada", money(commission, company_currency))
+
+    c.metric(
+        "Total que pagaste" if operation == "COMPRA"
+        else "Neto que recibiste",
+        money(total, company_currency)
+    )
+
+    if st.button(
+        "Guardar compra" if operation == "COMPRA" else "Guardar venta",
+        type="primary",
+        key="save_trade_simple"
+    ):
+
+        try:
+            if price <= 0:
+                st.error("Escribe el precio real de UNA acción.")
+
+            elif is_new and (
+                not company_name.strip() or not company_symbol
+            ):
+                st.error("Completa el nombre y el símbolo.")
+
+            elif is_new and any(
+                a["symbol"].upper() == company_symbol
+                for a in assets
+            ):
+                st.error(
+                    "Ese símbolo ya existe. Selecciona la empresa de la lista."
+                )
+
+            elif is_new and operation == "VENTA":
+                st.error(
+                    "Primero debes registrar una compra de esa empresa."
+                )
+
+            elif (
+                not is_new
+                and operation == "VENTA"
+                and int(quantity) >
+                position_by_id[selected["id"]]["quantity"] + 1e-9
+            ):
+                st.error("No tienes suficientes acciones para esa venta.")
+
+            else:
+                if is_new:
+                    db.add_asset(
+                        company_name.strip(),
+                        company_symbol,
+                        "ACCION",
+                        company_currency,
+                        company_market.strip() or "Mercado no especificado",
+                        0.0,
+                        "Sin cotización actual verificada"
+                    )
+
+                    selected = next(
+                        a for a in db.get_assets()
+                        if a["symbol"].upper() == company_symbol
+                    )
+
+                db.add_transaction(
+                    selected["id"],
+                    operation,
+                    trade_date.isoformat(),
+                    int(quantity),
+                    float(price),
+                    float(commission)
+                )
+
+                st.success(
+                    "Operación guardada. Tu portafolio se actualizará."
+                )
+
+                st.rerun()
+
+        except Exception as exc:
+            st.error(f"No se pudo guardar la operación: {exc}")
+
+    st.caption(
+        "Esta pantalla registra operaciones que ya hiciste en Trii. "
+        "No ejecuta compras reales."
+    )
 
 
-# ============================================================
 # 4. CDT
 # ============================================================
 

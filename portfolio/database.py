@@ -1,17 +1,12 @@
+
 import sqlite3
 import math
+from datetime import date as date_class
 from contextlib import contextmanager
 
 
 class Database:
-    """
-    Gestiona la base de datos SQLite del portafolio.
-
-    Importante:
-    - No elimina inversiones ni operaciones existentes.
-    - Crea las tablas que falten.
-    - Mantiene compatibilidad con la aplicación actual.
-    """
+    """Gestiona la base de datos SQLite del portafolio."""
 
     def __init__(self, db_path="portfolio_data.db"):
         self.db_path = str(db_path)
@@ -40,12 +35,32 @@ class Database:
         try:
             number = float(value)
         except (TypeError, ValueError):
-            raise ValueError(f"El campo {field_name} debe ser numérico.")
+            raise ValueError(
+                f"El campo {field_name} debe ser numérico."
+            )
 
         if not math.isfinite(number):
-            raise ValueError(f"El campo {field_name} no es válido.")
+            raise ValueError(
+                f"El campo {field_name} no es válido."
+            )
 
         return number
+
+    @staticmethod
+    def _valid_date(value, field_name="fecha"):
+        try:
+            parsed = date_class.fromisoformat(str(value))
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"El campo {field_name} debe tener formato AAAA-MM-DD."
+            )
+
+        if parsed.isoformat() != str(value):
+            raise ValueError(
+                f"El campo {field_name} debe tener formato AAAA-MM-DD."
+            )
+
+        return parsed
 
     def initialize(self):
         with self.connection() as con:
@@ -118,7 +133,7 @@ class Database:
             ).fetchone()[0]
 
             # Solo crea activos de ejemplo si la tabla está vacía.
-            # Nunca reemplaza ni elimina activos existentes.
+            # No elimina ni reemplaza activos existentes.
             if count == 0:
                 initial_assets = [
                     (
@@ -221,13 +236,19 @@ class Database:
     ):
         name = str(name).strip()
         symbol = str(symbol).strip().upper()
-        current_price = self._number(current_price, "precio")
+        current_price = self._number(
+            current_price, "precio"
+        )
 
         if not name or not symbol:
-            raise ValueError("El nombre y el símbolo son obligatorios.")
+            raise ValueError(
+                "El nombre y el símbolo son obligatorios."
+            )
 
         if current_price < 0:
-            raise ValueError("El precio no puede ser negativo.")
+            raise ValueError(
+                "El precio no puede ser negativo."
+            )
 
         with self.connection() as con:
             cursor = con.execute("""
@@ -254,20 +275,29 @@ class Database:
             return cursor.lastrowid
 
     def update_price(self, asset_id, price, source, date):
+        date = self._valid_date(date).isoformat()
         price = self._number(price, "precio")
 
         if price < 0:
-            raise ValueError("El precio no puede ser negativo.")
+            raise ValueError(
+                "El precio no puede ser negativo."
+            )
 
         with self.connection() as con:
             cursor = con.execute("""
                 UPDATE assets
                 SET current_price = ?, source = ?
                 WHERE id = ?
-            """, (price, str(source), int(asset_id)))
+            """, (
+                price,
+                str(source),
+                int(asset_id)
+            ))
 
             if cursor.rowcount == 0:
-                raise ValueError("No se encontró el activo seleccionado.")
+                raise ValueError(
+                    "No se encontró el activo seleccionado."
+                )
 
             con.execute("""
                 INSERT INTO price_history (
@@ -279,7 +309,7 @@ class Database:
                 VALUES (?, ?, ?, ?)
             """, (
                 int(asset_id),
-                str(date),
+                date,
                 price,
                 str(source)
             ))
@@ -304,21 +334,46 @@ class Database:
         price,
         commission
     ):
-        operation = str(operation).upper()
+        operation = str(operation).strip().upper()
+        transaction_date = self._valid_date(date)
+        date_text = transaction_date.isoformat()
+
         quantity = self._number(quantity, "cantidad")
         price = self._number(price, "precio")
         commission = self._number(commission, "comisión")
 
         if operation not in ("COMPRA", "VENTA"):
-            raise ValueError("La operación debe ser COMPRA o VENTA.")
+            raise ValueError(
+                "La operación debe ser COMPRA o VENTA."
+            )
 
         if quantity <= 0:
-            raise ValueError("La cantidad debe ser mayor que cero.")
+            raise ValueError(
+                "La cantidad debe ser mayor que cero."
+            )
 
         if price < 0 or commission < 0:
-            raise ValueError("El precio y la comisión no pueden ser negativos.")
+            raise ValueError(
+                "El precio y la comisión no pueden ser negativos."
+            )
 
-        asset_id = int(asset_id)
+        gross_value = quantity * price
+
+        if (
+            operation == "VENTA"
+            and commission > gross_value + 1e-9
+        ):
+            raise ValueError(
+                "La comisión de una venta no puede superar "
+                "el valor bruto."
+            )
+
+        try:
+            asset_id = int(asset_id)
+        except (TypeError, ValueError):
+            raise ValueError(
+                "El activo seleccionado no es válido."
+            )
 
         with self.connection() as con:
             asset = con.execute(
@@ -327,28 +382,54 @@ class Database:
             ).fetchone()
 
             if asset is None:
-                raise ValueError("El activo seleccionado no existe.")
+                raise ValueError(
+                    "El activo seleccionado no existe."
+                )
 
-            if operation == "VENTA":
-                rows = con.execute("""
-                    SELECT operation, quantity
-                    FROM transactions
-                    WHERE asset_id = ?
-                    ORDER BY date, id
-                """, (asset_id,)).fetchall()
+            # Recupera todas las operaciones del activo.
+            rows = con.execute("""
+                SELECT id, operation, date, quantity
+                FROM transactions
+                WHERE asset_id = ?
+            """, (asset_id,)).fetchall()
 
-                available = 0.0
+            ledger = [
+                (
+                    str(row["date"]),
+                    int(row["id"]),
+                    row["operation"],
+                    float(row["quantity"])
+                )
+                for row in rows
+            ]
 
-                for row in rows:
-                    if row["operation"] == "COMPRA":
-                        available += float(row["quantity"])
-                    else:
-                        available -= float(row["quantity"])
+            # La nueva operación se considera posterior a las
+            # operaciones ya registradas en la misma fecha.
+            ledger.append((
+                date_text,
+                float("inf"),
+                operation,
+                quantity
+            ))
 
-                if quantity > available + 1e-9:
+            ledger.sort(
+                key=lambda item: (item[0], item[1])
+            )
+
+            available = 0.0
+
+            # Recorre el historial en orden cronológico.
+            for _, _, ledger_operation, ledger_quantity in ledger:
+                if ledger_operation == "COMPRA":
+                    available += ledger_quantity
+                else:
+                    available -= ledger_quantity
+
+                if available < -1e-9:
                     raise ValueError(
-                        f"No tienes suficientes unidades. "
-                        f"Disponibles: {available:.6f}."
+                        "No puedes registrar una venta antes "
+                        "de tener las unidades disponibles "
+                        "en esa fecha."
                     )
 
             cursor = con.execute("""
@@ -364,7 +445,7 @@ class Database:
             """, (
                 asset_id,
                 operation,
-                str(date),
+                date_text,
                 quantity,
                 price,
                 commission
@@ -380,8 +461,11 @@ class Database:
         amount,
         description=""
     ):
-        event_type = str(event_type).upper()
-        amount = self._number(amount, "valor del ingreso")
+        event_type = str(event_type).strip().upper()
+        date = self._valid_date(date).isoformat()
+        amount = self._number(
+            amount, "valor del ingreso"
+        )
 
         if event_type not in ("DIVIDENDO", "INTERES"):
             raise ValueError(
@@ -389,7 +473,9 @@ class Database:
             )
 
         if amount < 0:
-            raise ValueError("El ingreso no puede ser negativo.")
+            raise ValueError(
+                "El ingreso no puede ser negativo."
+            )
 
         with self.connection() as con:
             cursor = con.execute("""
@@ -404,7 +490,7 @@ class Database:
             """, (
                 int(asset_id),
                 event_type,
-                str(date),
+                date,
                 amount,
                 str(description)
             ))
@@ -467,6 +553,7 @@ class Database:
             annual_rate_pct,
             "tasa anual"
         )
+
         nominal_value = self._number(
             nominal_value,
             "valor nominal"
@@ -536,10 +623,14 @@ class Database:
             }
 
     def save_fee_setting(self, asset_id, fee_pct):
-        fee_pct = self._number(fee_pct, "comisión")
+        fee_pct = self._number(
+            fee_pct, "comisión"
+        )
 
         if fee_pct < 0:
-            raise ValueError("La comisión no puede ser negativa.")
+            raise ValueError(
+                "La comisión no puede ser negativa."
+            )
 
         with self.connection() as con:
             con.execute("""
