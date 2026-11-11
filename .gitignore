@@ -5,4 +5,7 @@ venv/
 .env
 .DS_Store
 portfolio_data.db
+portfolio_data.db-journal
+*.db
+backups/
 .pytest_cache/

@@ -1,121 +1,91 @@
-# Seguimiento de portafolio de inversión
+# Portafolio de inversión
 
-Aplicación académica desarrollada en Python y Streamlit para registrar operaciones de compra y venta, ingresos por dividendos e intereses, actualizar precios y consultar el desempeño de un portafolio con activos de renta fija y renta variable.
+Aplicación en Python + Streamlit + SQLite para llevar el control de un portafolio personal:
+acciones, CDT, TES y bonos, dividendos y rentabilidad. Es una herramienta de seguimiento y
+formación: **no ejecuta órdenes ni se conecta a tu cuenta de Trii** y no es asesoría financiera.
 
-## Empresas incluidas
+## Cómo ejecutarla en Windows
 
-- Bancolombia: acción local en Colombia. Su precio se ingresa manualmente a partir de una fuente de mercado verificable.
-- Amazon: AMZN.
-- The Coca-Cola Company: KO.
-- Nike: NKE.
+1. Abre la carpeta del proyecto (`C:\Users\Samar\OneDrive\Documentos\PORTAFOLIO_DE_INVERSION`) en VS Code.
+2. Abre la terminal (menú Terminal > Nueva terminal) y escribe, una línea a la vez:
 
-También se incluyen instrumentos de ejemplo para CDT, bonos y TES. Sus condiciones deben ser ingresadas por el usuario a partir de documentos o fuentes verificables.
+   ```
+   py -m venv .venv
+   .\.venv\Scripts\activate
+   pip install -r requirements.txt
+   python -m unittest discover -s tests
+   streamlit run app.py
+   ```
+   (Si ya tenías el entorno `.venv`, solo necesitas `.\.venv\Scripts\activate`, `pip install -r requirements.txt` y `streamlit run app.py`.)
+3. Se abre el navegador con la aplicación. Para cerrarla, presiona `Ctrl + C` en la terminal.
 
-## Funcionalidades
+Si PowerShell no deja activar el entorno, ejecuta una vez
+`Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` y vuelve a intentarlo.
 
-- Registro de activos.
-- Registro de compras y ventas con fecha, cantidad, precio y comisión.
-- Registro de dividendos e intereses.
-- Actualización manual de precios y consulta de último cierre para AMZN, KO y NKE mediante yfinance.
-- Conversión de posiciones en USD a COP mediante una tasa USD/COP ingresada por el usuario.
-- Cálculo de costo de posición usando costo promedio ponderado.
-- Resultado realizado y no realizado.
-- Rentabilidad acumulada simplificada.
-- TIR anualizada (XIRR) basada en flujos fechados.
-- Distribución entre renta fija y renta variable.
+## Tus datos están protegidos
 
-## Requisitos
+* La base `portfolio_data.db` **nunca se borra ni se reemplaza**. No está en GitHub (está en `.gitignore`); vive solo en tu carpeta.
+* La primera vez que abras esta versión, la app **hace una copia automática** en la carpeta `backups/` antes de actualizar la base. Después solo *agrega* columnas y tablas nuevas; no elimina nada.
+* Puedes crear otra copia cuando quieras con el botón *Crear copia de seguridad ahora* del panel lateral.
+* Consejo: la carpeta está en OneDrive. Cierra la app antes de que OneDrive sincronice grandes cambios y no abras la misma base desde dos computadores a la vez.
 
-Python 3.10 o superior recomendado.
+## Cómo se usa
 
-## Instalación en VS Code
+**Registrar una compra** (pestaña *Compra y venta*): elige *COMPRA*. Si la empresa ya existe, selecciónala; si es nueva, elige *Empresa nueva* y llena nombre, símbolo, moneda y mercado: la empresa y la compra se guardan juntas. Ingresa fecha, cantidad y precio; la app estima la comisión. Si ya tienes el comprobante, marca *Ya tengo el comprobante* y escribe la comisión real.
 
-1. Descarga o clona el repositorio.
-2. Abre la carpeta `seguimiento-portafolio` en VS Code.
-3. Abre la terminal integrada.
-4. Crea un entorno virtual:
+**Registrar una venta**: elige *VENTA* y la acción (solo aparecen las que tienes). La app no deja vender más de lo que tenías en esa fecha.
 
-   Windows:
-   `py -m venv .venv`
-   `.\.venv\Scripts\activate`
+**Registrar un dividendo** (pestaña *Dividendos*): elige la inversión, la fecha y el valor **bruto**; si hubo retención u otros costos, anótalos. Si dejas *Otros costos* en 0 y la acción es en COP, la app estima el costo de Trii (1 %, mínimo $200) y lo marca como estimado; corrígelo en *Historial* con tu comprobante. Si repites un pago idéntico, la app lo rechaza para no contarlo dos veces.
 
-   macOS/Linux:
-   `python3 -m venv .venv`
-   `source .venv/bin/activate`
+**Registrar un CDT, TES o bono** (pestañas *CDT* y *TES y bonos*): abre *Registrar…* y llena capital, tasa, modalidad, fechas y frecuencia de pago. Los intereses que vayas recibiendo se anotan en *Dividendos* (tipo INTERES). Al vencimiento usa *Registrar redención* con el total recibido; así se calcula la ganancia. Si registras el total en la redención, no lo repitas como interés.
 
-5. Instala dependencias:
+## Precios y ganancias
 
-   `pip install -r requirements.txt`
+* **Precio actual.** En *Consultar acciones* puedes consultar Yahoo Finance (`yfinance`) o escribir el precio que ves en Trii. Cada precio guarda **fuente y fecha**. Yahoo entrega el **último cierre diario**, que no es un precio en tiempo real. Muchos símbolos colombianos no existen en Yahoo: en ese caso usa el precio manual.
+* **Precio faltante = Pendiente.** Nunca se toma como cero ni como pérdida: ese activo queda fuera del valor actual y de la rentabilidad, y se muestra un aviso.
+* **Costo promedio ponderado.** El costo incluye la comisión de compra. Al vender, el costo de lo vendido es el costo promedio × cantidad.
+* **Ganancia realizada** = (precio × cantidad − comisión de venta) − costo de lo vendido.
+* **Ganancia no realizada** = (cantidad que conservas × precio actual) − costo de lo que conservas.
+* **Resultado total** = realizada + no realizada + dividendos netos. Las comisiones ya están dentro del costo y de lo realizado, por eso no se restan otra vez (se muestran aparte solo como información).
+* **Rentabilidad total** = resultado total ÷ total comprado (solo activos con precio conocido). La **TIR anualizada (XIRR)** usa las fechas reales de cada flujo y solo se calcula si todos los activos tienen precio y tasa de cambio.
+* **USD/COP.** La tasa se guarda con fuente y fecha (consulta de mercado de Yahoo, o la TRM oficial que ingreses). Sin tasa, las acciones en dólares no se suman en pesos.
 
-6. Ejecuta las pruebas:
+## Comisiones de Trii
 
-   `python -m unittest discover -s tests -v`
+Tarifas de referencia, revisadas el 9-nov-2026 en [trii.co/faq](https://trii.co/faq) y [trii.co/acciones-estados-unidos](https://trii.co/acciones-estados-unidos):
 
-7. Ejecuta la aplicación:
+| Concepto | Estándar | Pro | Estado |
+|---|---|---|---|
+| Bolsa de Colombia | $12.500 + IVA (= $14.875) hasta $5.000.000; 0,25 % + IVA por encima | 0,125 % con mínimo $6.250 + IVA | Estándar **verificado**; Pro **NO verificado** (Trii no publica la tarifa Pro de acciones colombianas; es una estimación) |
+| Bolsa de EE. UU. | 0,2 % | sin comisión | **Verificado** (la página no aclara si suma IVA: configurable) |
+| Dividendos (acciones en COP) | 1 % del dividendo recibido, mínimo $200, más retención en la fuente si aplica | igual | **Verificado** el valor; no se sabe si lleva IVA (configurable) |
 
-   `streamlit run app.py`
+Todo es una **estimación configurable** (panel lateral): la comisión real es la de tu comprobante. Se corrige en *Historial*, tanto la de compras/ventas como la retención y costos de dividendos. Trii también hace jornadas sin comisión (por ejemplo, el "Día trii"); en esos casos corrige la comisión a 0 con el comprobante.
 
-La base de datos SQLite se crea automáticamente en la primera ejecución.
+## ¿Se puede conectar con Trii?
 
-## Criterios financieros y supuestos
+No encontré una API pública y documentada de Trii (revisé trii.co/faq y búsquedas web el 9-nov-2026; no mencionan API ni acceso para desarrolladores). Por eso la aplicación **no simula ninguna conexión y nunca te pide contraseñas ni tokens**. La alternativa segura es la que ya incluye: precios desde Yahoo Finance cuando el símbolo existe, o ingreso manual con fuente y fecha, y comisiones corregibles con el comprobante. Si Trii publica una API oficial en el futuro, se puede agregar como una fuente más.
 
-- La moneda consolidada de presentación es COP.
-- Los activos en USD se convierten usando la tasa USD/COP que el usuario introduce en la barra lateral. El valor inicial de 4.000 COP/USD es solo un ejemplo, no una cotización vigente.
-- Las comisiones se registran en la moneda del activo.
-- El costo de adquisición incluye la comisión de compra.
-- Las ventas descuentan la comisión y reconocen el resultado realizado con costo promedio ponderado.
-- El resultado no realizado compara el valor actual con el costo de las unidades que siguen en cartera.
-- Dividendos e intereses son ingresos. Una devolución de capital no debe registrarse como interés: debe reflejarse como reducción de la posición.
-- La rentabilidad acumulada del tablero es una medida simplificada: (resultado realizado + resultado no realizado + ingresos) / compras acumuladas. Para aportes y retiros complejos, debe interpretarse junto con la XIRR.
-- La XIRR estima una tasa anualizada con fechas reales de compras, ventas, ingresos y valor actual. Puede no existir una solución única o válida; en ese caso muestra N/D.
-- La aplicación no calcula impuestos, retenciones, inflación, intereses corridos, precio limpio/sucio de bonos ni convenciones avanzadas de valoración de renta fija.
+## Limitaciones
 
-## Fuentes de datos
+* Yahoo Finance no es tiempo real y puede no tener tus acciones colombianas. `yfinance` es una librería de terceros no afiliada a Yahoo; revisa sus términos de uso.
+* La tasa de mercado de Yahoo no es la TRM oficial.
+* Las operaciones en USD se convierten con la tasa actual, no con la del día de cada operación (afecta la TIR).
+* CDT, TES y bonos se valoran a costo registrado. El interés estimado al vencimiento solo se calcula para tasas efectivas anuales con pago al vencimiento y es bruto de impuestos. No hay precio limpio/sucio, cupones ni intereses corridos.
+* No calcula impuestos, retención en la fuente ni inflación.
+* No hay opción de borrar o editar operaciones (para conservar el historial completo); solo se puede corregir la comisión y, en dividendos, la retención y los costos.
+* La consulta en vivo a Yahoo Finance no pudo probarse en el entorno de desarrollo (red bloqueada); las pruebas simulan sus respuestas. Pruébala en tu computador.
 
-- Bancolombia – Relación con inversionistas: https://www.grupobancolombia.com/relacion-inversionistas
-- Valores Bancolombia – Acciones: https://valores.bancolombia.com/productos-servicios/acciones
-- Bancolombia – Consulta del precio de acciones: https://www.bancolombia.com/centro-de-ayuda/preguntas-frecuentes/consultar-precio-acciones-en-bancolombia
-- SEC EDGAR: https://www.sec.gov/edgar/search/
-- Yahoo Finance: https://finance.yahoo.com/
-- BVC: https://www.bvc.com.co/
-- Superintendencia Financiera: https://www.superfinanciera.gov.co/
-- Banco de la República: https://www.banrep.gov.co/
+## Pruebas
 
-`yfinance` es una biblioteca de terceros no afiliada ni respaldada por Yahoo. Está destinada a investigación y educación; revisa los términos de uso de Yahoo antes de utilizar sus datos.
+`python -m unittest discover -s tests -v` ejecuta las 73 pruebas de cálculos, comisiones, dividendos, formato, migración de la base antigua y apertura de la aplicación.
 
 ## Estructura
 
-- `app.py`: interfaz Streamlit.
-- `portfolio/`: modelos, base de datos, proveedor de precios y reglas de negocio.
-- `tests/`: pruebas automatizadas.
-- `docs/`: wiki y diagramas UML.
-
-## Alcance
-
-Proyecto educativo. No ejecuta órdenes bursátiles, no se conecta a cuentas de bróker y no constituye asesoría financiera.
-
-
-## Uso de la aplicación
-
-- En **Resumen** ves valor actual, compras acumuladas, resultados, ingresos y distribución.
-- En **Acciones** puedes actualizar AMZN, KO y NKE desde Yahoo Finance; Bancolombia local se ingresa manualmente.
-- En **Comprar / vender** registras cada operación. La comisión se calcula automáticamente con el porcentaje editable en la barra lateral.
-- En **CDT, bonos y TES** guardas tasa, modalidad, fechas, frecuencia y capital nominal.
-- En **Dividendos e intereses** registras los pagos efectivamente recibidos.
-- En **Rentabilidad y gráficos** consultas resultados por activo e historial de precios.
-- En **Historial** revisas todas las operaciones y actualizaciones.
-
-Los porcentajes de comisión que aparecen inicialmente (0,50% para acciones y 0% para instrumentos de renta fija) son valores ilustrativos editables, no tarifas oficiales. Configúralos según tu intermediario.
-
-Para que una operación no se mezcle con la cotización actual, el precio de compra o venta queda guardado en su propio registro. Actualizar el precio de mercado no modifica las operaciones anteriores.
-
-
-## Interfaz PORTAFOLIO DE INVERSIÓN
-
-La aplicación incluye panel de resumen, consulta y actualización de acciones, registro de compras y ventas, CDT, TES y bonos, dividendos e intereses, rentabilidad y rentabilidad efectiva anual (XIRR), gráficos e historial.
-
-Las comisiones por empresa se configuran en el panel lateral y quedan guardadas en SQLite. Los valores iniciales son ilustrativos, no tarifas oficiales.
-
-Los precios actuales se conservan hasta que el usuario los actualiza. Las operaciones mantienen el precio histórico con el que fueron registradas. Los precios de acciones estadounidenses pueden consultarse con yfinance; las cotizaciones locales se ingresan manualmente.
-
-Para CDT/TES/bonos se guardan las condiciones contractuales y el capital invertido. La app no calcula automáticamente precios de mercado, cupones futuros, impuestos, retenciones ni intereses corridos.
+* `app.py`: interfaz Streamlit (tema oscuro en `.streamlit/config.toml`).
+* `portfolio/database.py`: SQLite, copias de seguridad y migraciones que solo agregan.
+* `portfolio/portfolio_service.py`: costo promedio, ganancias, resumen y renta fija.
+* `portfolio/fees.py`: comisiones estimadas.
+* `portfolio/market_data.py`: cotizaciones (yfinance) con fuente y fecha.
+* `portfolio/formatting.py`: formato de pesos, dólares, cantidades y porcentajes.
+* `tests/`: pruebas automáticas. `docs/`: wiki y diagramas.
