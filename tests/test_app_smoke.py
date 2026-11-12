@@ -35,7 +35,7 @@ class AppSmokeTest(unittest.TestCase):
     def test_opens_with_empty_new_database(self):
         at = run_app(self.path)
         self.assert_clean(at)
-        self.assertEqual(len(at.tabs), 8)
+        self.assertEqual(len(at.tabs), 9)
 
     def test_opens_with_legacy_database_and_keeps_data(self):
         build_legacy_db(self.path)

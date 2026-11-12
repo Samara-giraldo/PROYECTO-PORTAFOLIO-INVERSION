@@ -149,6 +149,40 @@ def refresh_quote(asset):
         return False, f'{asset["name"]}: {exc}'
 
 
+# ------------------------------------------------------------------ capital y operaciones
+def sale_estimate_rows(kinds=None):
+    """Tabla "si vendo hoy": cuánto me saldría y cuánto me costó."""
+    est = service.sale_estimates(positions, fee_config, overrides, usd_cop)
+    rows = []
+    for r in est:
+        if kinds and r["asset_type"] not in kinds:
+            continue
+        cur = r["currency"]
+        fixed_type = r["asset_type"] != "ACCION"
+        base = {"Activo": r["name"], "Cantidad": "1 título" if fixed_type else fmt_qty(r["quantity"]),
+                "Costo de compra": fmt_money(r["remaining_cost"], cur)}
+        if not r["known"]:
+            rows.append({**base, "Precio / valor hoy": "Pendiente", "Neto si vendo hoy": "Pendiente",
+                         "Resultado": "Pendiente", "Nota": "Falta un precio o valor con fuente y fecha."})
+            continue
+        net_cop = r.get("net_cop")
+        rows.append({
+            **base,
+            "Costo promedio por acción": "—" if fixed_type else fmt_money(r["avg_cost"], cur),
+            "Precio / valor hoy": (fmt_money(r["price"], cur) + (f' ({r["price_date"]})' if r["price_date"] else "")),
+            "Valor bruto": fmt_money(r["gross"], cur),
+            "Comisión estimada de venta": fmt_money(r["fee"], cur),
+            "Neto si vendo hoy": fmt_money(r["net"], cur),
+            "Neto por acción": "—" if fixed_type else fmt_money(r["net_per_unit"], cur),
+            "Resultado": fmt_money(r["result"], cur),
+            "Resultado %": fmt_pct(r["result_pct"], signed=True),
+            "Neto en pesos": fmt_cop(net_cop) if net_cop is not None else ("—" if cur == "COP" else "Sin tasa USD/COP"),
+            "Resultado en pesos": fmt_cop(r.get("result_cop")) if r.get("result_cop") is not None else ("—" if cur == "COP" else "Sin tasa USD/COP"),
+            "Nota": r["fee_note"] + (" · TRM aproximada" if r.get("fx_approx") else ""),
+        })
+    return rows
+
+
 # ------------------------------------------------------------------ cabecera
 st.markdown("""
 <div class="hero">
@@ -267,7 +301,7 @@ income_rows = db.get_income_events()
 price_history = db.get_price_history()
 asset_by_id = {a["id"]: a for a in assets}
 
-tabs = st.tabs(["Resumen general", "Consultar acciones", "Compra y venta", "CDT",
+tabs = st.tabs(["Resumen general", "Capital y operaciones", "Consultar acciones", "Compra y venta", "CDT",
                 "TES y bonos", "Dividendos", "Rentabilidad", "Historial"])
 
 # ========================= RESUMEN =========================
@@ -365,7 +399,138 @@ with tabs[0]:
     st.caption("CDT, TES y bonos se valoran a su costo registrado: la app no inventa precios de mercado para ellos.")
 
 # ========================= CONSULTAR ACCIONES =========================
+# ========================= CAPITAL Y OPERACIONES =========================
 with tabs[1]:
+    st.markdown("### Capital inicial y efectivo")
+    if not summary["cash_configured"]:
+        st.info("Registra con cuánto dinero empezaste (tu capital inicial). Así la app puede decirte cuánto "
+                "efectivo te queda después de cada compra y cuánto vale todo tu patrimonio.")
+        with st.form("capital_form"):
+            c1, c2 = st.columns(2)
+            cap_amount = c1.number_input("Capital inicial (COP)", min_value=0.0, value=None, step=100000.0,
+                                         placeholder="Dinero con el que empezaste")
+            cap_day = c2.date_input("Fecha en que lo depositaste", value=date.today(), key="cap_day")
+            cap_note = st.text_input("Nota (opcional)")
+            if st.form_submit_button("Guardar capital inicial"):
+                if not cap_amount or cap_amount <= 0:
+                    st.error("Ingresa un capital mayor que cero.")
+                else:
+                    try:
+                        db.add_cash_movement("CAPITAL_INICIAL", cap_day.isoformat(), cap_amount, cap_note)
+                        flash("success", "Capital inicial guardado.")
+                        st.rerun()
+                    except ValueError as exc:
+                        st.error(str(exc))
+    else:
+        if summary["cash_negative"]:
+            st.warning("Tus compras superan el dinero que registraste: el efectivo da negativo. "
+                       "Registra un aporte (dinero que pusiste después) o revisa el capital inicial.")
+        if summary["fx_missing"] or summary["pending_assets"]:
+            st.warning("El patrimonio no se calcula completo mientras haya activos sin precio o sin tasa USD/COP "
+                       "(" + ", ".join(summary["fx_missing"] + summary["pending_assets"]) + ").")
+        m1, m2, m3, m4 = st.columns(4)
+        card(m1, "Capital inicial", fmt_cop(summary["initial_capital"]), "",
+             "Aportes: " + fmt_cop(summary["contributions"]) + " · Retiros: " + fmt_cop(summary["withdrawals"]))
+        card(m2, "Efectivo disponible", fmt_cop(summary["cash"]), tone_of(summary["cash"]) if summary["cash"] is not None else "pending",
+             "Lo que no está invertido")
+        card(m3, "Valor de tus inversiones", fmt_cop(summary["market_value"]), "", "Lo que valen hoy, sin venderlas")
+        card(m4, "Patrimonio estimado", fmt_cop(summary["net_worth"]),
+             tone_of(summary["net_worth_vs_money_in"]) if summary["net_worth"] is not None else "pending",
+             "Efectivo + inversiones")
+        with st.expander("¿Cómo se calculó el efectivo?"):
+            st.markdown(
+                "**Efectivo** = capital inicial + aportes − retiros − compras (con comisión) + ventas netas + "
+                "dividendos e intereses netos.\n\n"
+                "Las acciones que no has vendido **no** son efectivo: se cuentan en *Valor de tus inversiones*. "
+                "Al vender, el neto de la venta (después de comisión) entra al efectivo y esas acciones salen del valor invertido.")
+            show_table([
+                {"Concepto": "Capital inicial", "COP": fmt_cop(summary["initial_capital"])},
+                {"Concepto": "+ Aportes", "COP": fmt_cop(summary["contributions"])},
+                {"Concepto": "− Retiros", "COP": fmt_cop(summary["withdrawals"])},
+                {"Concepto": "− Compras (con comisión)", "COP": fmt_cop(summary["cash_out_buys"])},
+                {"Concepto": "+ Ventas netas", "COP": fmt_cop(summary["cash_in_sales"])},
+                {"Concepto": "+ Dividendos e intereses netos", "COP": fmt_cop(summary["income"])},
+                {"Concepto": "= Efectivo disponible", "COP": fmt_cop(summary["cash"])},
+            ])
+            if summary["net_worth_vs_money_in"] is not None:
+                st.caption("Patrimonio − dinero que has puesto (capital + aportes − retiros) = "
+                           + fmt_cop(summary["net_worth_vs_money_in"]) + ".")
+        with st.expander("Registrar un aporte o un retiro"):
+            with st.form("cash_form"):
+                k1, k2, k3 = st.columns(3)
+                cash_kind = k1.selectbox("Movimiento", ["APORTE", "RETIRO"],
+                                         format_func=lambda x: "Aporte (puse más dinero)" if x == "APORTE" else "Retiro (saqué dinero)")
+                cash_amount = k2.number_input("Valor (COP)", min_value=0.0, value=None, step=100000.0)
+                cash_day = k3.date_input("Fecha", value=date.today(), key="cash_day")
+                cash_note = st.text_input("Nota (opcional)", key="cash_note")
+                if st.form_submit_button("Guardar movimiento"):
+                    if not cash_amount or cash_amount <= 0:
+                        st.error("Ingresa un valor mayor que cero.")
+                    else:
+                        db.add_cash_movement(cash_kind, cash_day.isoformat(), cash_amount, cash_note)
+                        flash("success", "Movimiento guardado.")
+                        st.rerun()
+            show_table([{"Fecha": m["date"], "Movimiento": {"CAPITAL_INICIAL": "Capital inicial", "APORTE": "Aporte",
+                                                             "RETIRO": "Retiro"}[m["kind"]],
+                         "Valor": fmt_cop(m["amount"]), "Nota": m["notes"]} for m in db.get_cash_movements()])
+
+    st.markdown("### Cuánto y cuándo invertí")
+    purchases = service.purchase_log(positions)
+    if purchases:
+        show_table([{
+            "Fecha": r["date"], "Activo": r["name"],
+            "Cantidad": "1 título" if r["asset_type"] != "ACCION" else fmt_qty(r["quantity"]),
+            "Precio de compra": fmt_money(r["price"], r["currency"]),
+            "Comisión": fmt_money(r["fee"], r["currency"]),
+            "Costo total": fmt_money(r["cost"], r["currency"]),
+            "TRM usada": ("—" if r["currency"] == "COP" else
+                          (fmt_number(r["cost_cop"] / r["cost"], 2) if r["cost_cop"] and r["cost"] else "Sin TRM")),
+            "Costo total (COP)": fmt_cop(r["cost_cop"]) if r["cost_cop"] is not None else "Sin tasa USD/COP",
+        } for r in purchases])
+        st.caption("Costo total = cantidad × precio + comisión. En dólares, el valor en pesos usa la TRM del día de cada "
+                   "compra cuando la registraste; si no, la tasa actual (aproximado).")
+        per_asset = [{"Activo": p["name"], "Total invertido (COP)": fmt_cop(p.get("total_buys_cop")) if p.get("cop_ok") else "Sin tasa USD/COP",
+                      "Acciones que conservo": fmt_qty(p["quantity"]),
+                      "Costo promedio por acción": fmt_money(p["avg_cost"], p["currency"], missing="—")}
+                     for p in positions if p["total_buys"] > 0]
+        show_table(per_asset)
+        if summary["fx_approx"]:
+            st.warning("Estas operaciones en dólares no tienen TRM del día y usan la tasa actual: "
+                       + ", ".join(summary["fx_approx"]) + ". Agrégala en Historial para que el cálculo sea exacto.")
+    else:
+        st.info("Aún no hay compras registradas.")
+
+    st.markdown("### Ventas realizadas")
+    sales = service.sales_log(positions)
+    if sales:
+        show_table([{
+            "Fecha": r["date"], "Activo": r["name"],
+            "Cantidad vendida": "1 título" if r["asset_type"] != "ACCION" else fmt_qty(r["quantity"]),
+            "Precio de venta": fmt_money(r["price"], r["currency"]),
+            "Comisión de venta": fmt_money(r["fee"], r["currency"]),
+            "Neto recibido": fmt_money(r["net_proceeds"], r["currency"]),
+            "Costo promedio de compra": fmt_money(r["avg_cost"], r["currency"]),
+            "Costo de lo vendido": fmt_money(r["cost_sold"], r["currency"]),
+            "Resultado": fmt_money(r["result"], r["currency"]),
+            "Resultado %": fmt_pct(r["result_pct"], signed=True),
+            "Neto recibido (COP)": fmt_cop(r["net_proceeds_cop"]) if r["net_proceeds_cop"] is not None else "Sin tasa USD/COP",
+            "Resultado (COP)": fmt_cop(r["result_cop"]) if r["result_cop"] is not None else "Sin tasa USD/COP",
+        } for r in sales], pnl_cols=("Resultado", "Resultado %", "Resultado (COP)"))
+        st.caption("Resultado = neto recibido (precio × cantidad − comisión) − costo promedio × cantidad vendida.")
+    else:
+        st.info("Aún no has vendido nada.")
+
+    st.markdown("### Si vendo hoy: cuánto me sale y cuánto me costó")
+    est_rows = sale_estimate_rows()
+    if est_rows:
+        show_table(est_rows, pnl_cols=("Resultado", "Resultado %", "Resultado en pesos"))
+        st.caption("Es una ESTIMACIÓN con el último precio guardado y la comisión estimada de venta; no es una orden "
+                   "ni un precio garantizado. Sin precio, el activo queda en Pendiente (no se toma como cero). "
+                   "No incluye impuestos.")
+    else:
+        st.info("No tienes inversiones abiertas.")
+
+with tabs[2]:
     st.markdown("### Acciones y cotizaciones")
     st.info("Los precios de Yahoo Finance son el **último cierre diario**, no un precio en tiempo real. "
             "Cada precio guardado muestra su fuente y su fecha. Si un símbolo no existe en Yahoo "
@@ -452,7 +617,7 @@ with tabs[1]:
         st.info("Todavía no hay acciones. Registra tu primera compra en la pestaña Compra y venta.")
 
 # ========================= COMPRA Y VENTA =========================
-with tabs[2]:
+with tabs[3]:
     st.markdown("### Registrar compra o venta de acciones")
     nonce = st.session_state.setdefault("trade_nonce", 0)
     k = lambda name: f"{name}_{nonce}"
@@ -503,6 +668,17 @@ with tabs[2]:
         if asset and default_price:
             st.caption("El precio se sugirió con la última cotización guardada; cámbialo por el precio real de tu operación.")
 
+        trade_fx = None
+        if currency == "USD":
+            trade_fx = st.number_input(
+                "TRM del día de la operación (pesos por dólar)", min_value=0.0, value=None,
+                step=1.0, placeholder="Ej.: la TRM de ese día", key=k("trade_fx"),
+                help="Con esta TRM se calcula cuánto costó o cuánto recibiste en pesos ese día. "
+                     "Si la dejas vacía se usa la tasa actual y el cálculo queda aproximado.")
+            if not trade_fx:
+                st.caption("Sin TRM del día: el valor en pesos de esta operación será aproximado "
+                           "(se usará la tasa actual). Puedes corregirlo después en Historial.")
+
         gross = (qty or 0) * (price or 0)
         override = overrides.get(asset["id"]) if asset else None
         est = compute_commission(gross, currency, fee_config, override)
@@ -523,6 +699,8 @@ with tabs[2]:
         total = gross + commission if operation == "COMPRA" else gross - commission
         label = "Total a invertir (con comisión)" if operation == "COMPRA" else "Neto estimado de la venta"
         st.markdown(f"**{label}:** {fmt_money(total, currency)}")
+        if currency == "USD" and trade_fx:
+            st.markdown(f"**En pesos (TRM {fmt_number(trade_fx, 2)}):** {fmt_cop(total * trade_fx)}")
 
         confirmed = st.checkbox("Confirmo que deseo registrar esta operación.", key=k("confirm"))
         if st.button("Guardar operación", key=k("save")):
@@ -535,7 +713,8 @@ with tabs[2]:
                     st.error("Ingresa el precio por acción (mayor que cero).")
                 elif mode == "new":
                     asset_id, _ = service.register_first_purchase(
-                        new_asset, trade_date.isoformat(), qty, price, commission, fee_source)
+                        new_asset, trade_date.isoformat(), qty, price, commission, fee_source,
+                        fx_rate=trade_fx or None)
                     saved = db.get_asset(asset_id)
                     extra = " El precio actual queda pendiente hasta que registres una cotización."
                     if saved.get("yahoo_symbol"):
@@ -546,7 +725,7 @@ with tabs[2]:
                     st.rerun()
                 else:
                     service.register_trade(asset["id"], operation, trade_date.isoformat(), qty, price,
-                                           commission, fee_source)
+                                           commission, fee_source, fx_rate=trade_fx or None)
                     st.session_state["trade_nonce"] = nonce + 1
                     flash("success", "Operación registrada correctamente.")
                     st.rerun()
@@ -580,8 +759,10 @@ def fixed_income_tab(kinds, singular, default_rate_types, default_frequencies, m
             kind = st.selectbox("Instrumento", list(kinds)) if len(kinds) > 1 else kinds[0]
             name = st.text_input("Nombre o entidad")
             code = st.text_input("Código o referencia")
-            capital = st.number_input("Capital invertido (COP)", min_value=0.0, value=None, step=100000.0,
-                                      placeholder="Valor invertido")
+            capital = st.number_input("Capital invertido: lo que pagaste (COP)", min_value=0.0, value=None, step=100000.0,
+                                      placeholder="Valor pagado")
+            nominal_in = st.number_input("Valor nominal del título (opcional)", min_value=0.0, value=None, step=100000.0,
+                                         placeholder="Solo si es distinto de lo que pagaste")
             rate = st.number_input("Tasa anual (%)", min_value=0.0, value=None, step=0.1, placeholder="Ej.: la tasa de tu título")
             rate_type = st.selectbox("Modalidad de tasa", default_rate_types)
             start = st.date_input("Fecha de apertura / compra", value=date.today(), key=f"{key}_start")
@@ -602,7 +783,8 @@ def fixed_income_tab(kinds, singular, default_rate_types, default_frequencies, m
                 else:
                     db.add_fixed_income_investment(name.strip(), code.strip().upper(), kind, market_name,
                                                    capital, rate, rate_type, start.isoformat(),
-                                                   end.isoformat(), freq, notes)
+                                                   end.isoformat(), freq, notes,
+                                                   nominal=nominal_in or None)
                     flash("success", f"{singular.capitalize()} registrado: el capital se contabiliza como inversión.")
                     st.rerun()
 
@@ -631,13 +813,42 @@ def fixed_income_tab(kinds, singular, default_rate_types, default_frequencies, m
                             st.error(str(exc))
 
 
-with tabs[3]:
+    if held:
+        with st.expander("Valor de mercado de hoy (para saber cuánto me sale si vendo)"):
+            st.caption("Escribe lo que te ofrecen HOY por toda tu posición (por ejemplo, el valor que ves en Trii o en "
+                       "tu comisionista) con su fuente y fecha. No se inventa: sin este dato la app solo muestra "
+                       "el costo registrado y el cálculo de venta queda en Pendiente. Nunca se valora un TES sumando "
+                       "intereses.")
+            with st.form(f"mkt_{key}_form"):
+                mid = st.selectbox("Inversión", [r["asset_id"] for r in held], key=f"{key}_mid",
+                                   format_func=lambda i: next(r["name"] for r in held if r["asset_id"] == i))
+                m_value = st.number_input("Valor de venta hoy, total (COP)", min_value=0.0, value=None, step=100000.0,
+                                          placeholder="Lo que recibirías hoy")
+                m_day = st.date_input("Fecha de ese valor", value=date.today(), key=f"{key}_mday")
+                m_src = st.text_input("Fuente", placeholder="Ej.: pantalla de Trii / cotización del comisionista")
+                if st.form_submit_button("Guardar valor de hoy"):
+                    if not m_value or m_value <= 0:
+                        st.error("Ingresa un valor mayor que cero.")
+                    elif not m_src.strip():
+                        st.error("Escribe la fuente del valor.")
+                    else:
+                        db.update_price(mid, m_value, m_src.strip(), m_day.isoformat(), market.now())
+                        flash("success", "Valor guardado. El cálculo de venta se actualizó.")
+                        st.rerun()
+        est_fixed = sale_estimate_rows(kinds)
+        if est_fixed:
+            st.markdown("#### Si vendo hoy")
+            show_table(est_fixed, pnl_cols=("Resultado", "Resultado %", "Resultado en pesos"))
+            st.caption("Estimación sin comisión de venta ni impuestos. Los intereses ya recibidos se ven en Dividendos.")
+
+
+with tabs[4]:
     st.markdown("### Inversiones en CDT")
     fixed_income_tab(("CDT",), "CDT", ["Efectiva anual", "Nominal anual", "Fija", "Variable"],
                      ["Al vencimiento", "Mensual", "Trimestral", "Semestral", "Anual"],
                      "Entidad financiera", "cdt")
 
-with tabs[4]:
+with tabs[5]:
     st.markdown("### TES y bonos")
     fixed_income_tab(("TES", "BONO"), "TES o bono", ["Fija", "Variable", "UVR / indexada", "Descuento / cero cupón"],
                      ["Semestral", "Anual", "Trimestral", "Mensual", "Al vencimiento", "Sin cupón"],
@@ -646,7 +857,7 @@ with tabs[4]:
                "debe venir de una cotización real; no se inventan precios ni cupones.")
 
 # ========================= DIVIDENDOS =========================
-with tabs[5]:
+with tabs[6]:
     st.markdown("### Dividendos e intereses recibidos")
     if not assets:
         st.info("Primero registra una inversión.")
@@ -667,6 +878,9 @@ with tabs[5]:
             inc_fee = i2.number_input("Otros costos (si aplican)", min_value=0.0, value=0.0, step=100.0)
             inc_est = st.checkbox("Si dejé «Otros costos» en 0, estimar el costo de Trii por dividendos "
                                   "(solo acciones en COP)", value=True)
+            inc_fx = st.number_input("TRM del día del pago (solo si el activo es en dólares)",
+                                     min_value=0.0, value=None, step=1.0,
+                                     placeholder="Ej.: la TRM de ese día; vacío si es en pesos")
             inc_note = st.text_input("Descripción / periodo / referencia")
             inc_dup = st.checkbox("Es un pago distinto aunque tenga la misma fecha y valor que otro")
             if st.form_submit_button("Registrar ingreso"):
@@ -683,7 +897,8 @@ with tabs[5]:
                             if fee_used > 0:
                                 note_used = (inc_note + " · " if inc_note else "") + "Costo de Trii estimado (corregible con el comprobante)"
                         db.add_income(inc_id, inc_kind, inc_day.isoformat(), inc_gross, note_used,
-                                      inc_ret, fee_used, allow_duplicate=inc_dup)
+                                      inc_ret, fee_used, allow_duplicate=inc_dup,
+                                      fx_rate=(inc_fx or None) if chosen_asset["currency"] == "USD" else None)
                         flash("success", "Ingreso registrado." + (
                             f" Costo estimado de Trii: {fmt_money(fee_used, chosen_asset['currency'])}." if fee_used > inc_fee else ""))
                         st.rerun()
@@ -711,7 +926,7 @@ with tabs[5]:
         st.info("No se han registrado dividendos ni intereses.")
 
 # ========================= RENTABILIDAD =========================
-with tabs[6]:
+with tabs[7]:
     st.markdown("### Rendimiento del portafolio")
     if summary["partial"]:
         st.warning("Las cifras son parciales: hay activos sin precio o sin tasa de cambio (ver pestaña Resumen). "
@@ -776,7 +991,7 @@ with tabs[6]:
 # ========================= HISTORIAL =========================
 SOURCE_LABELS = {"ESTIMADA": "Estimada", "COMPROBANTE": "Real (comprobante)",
                  "SIN_COMISION": "Sin comisión", "SIN_DATO": "Sin dato (registro anterior)"}
-with tabs[7]:
+with tabs[8]:
     st.markdown("### Historial de actividad")
     tx = db.get_transactions()
     if tx:
@@ -787,6 +1002,8 @@ with tabs[7]:
             "Comisión": fmt_money(t["commission"], t["currency"]),
             "Origen de la comisión": SOURCE_LABELS.get(t.get("commission_source"), t.get("commission_source")),
             "Moneda": t["currency"],
+            "TRM del día": ("—" if t["currency"] == "COP" else
+                            (fmt_number(t["fx_rate"], 2) if t.get("fx_rate") else "Sin TRM (usa la actual)")),
         } for t in tx]
         st.markdown("#### Compras y ventas")
         show_table(trade_rows)
@@ -807,6 +1024,25 @@ with tabs[7]:
                     db.update_transaction_commission(tid, new_fee)
                     flash("success", "Comisión corregida. Los cálculos se actualizaron.")
                     st.rerun()
+        usd_tx = [t for t in tx if t["currency"] == "USD"]
+        if usd_tx:
+            with st.expander("Agregar o corregir la TRM del día de una operación en dólares"):
+                st.caption("La TRM del día de cada compra o venta permite calcular en pesos lo que costó y lo que "
+                           "recibiste ese día (como en una hoja de cálculo contable). Sin ella se usa la tasa actual.")
+                fx_tid = st.selectbox("Operación", [t["id"] for t in reversed(usd_tx)], key="fx_tx",
+                                      format_func=lambda i: next(
+                                          f'N.º {t["id"]} · {t["date"]} · {t["asset_name"]} · {t["operation"]}'
+                                          for t in usd_tx if t["id"] == i))
+                fx_chosen = next(t for t in usd_tx if t["id"] == fx_tid)
+                fx_new = st.number_input("TRM de ese día (pesos por dólar)", min_value=0.0,
+                                         value=float(fx_chosen["fx_rate"] or 0.0) or None, step=1.0, key=f"fx_new_{fx_tid}")
+                if st.button("Guardar TRM de la operación", key="fx_tx_save"):
+                    try:
+                        db.update_transaction_fx(fx_tid, fx_new or 0)
+                        flash("success", "TRM guardada. Los cálculos en pesos se actualizaron.")
+                        st.rerun()
+                    except ValueError as exc:
+                        st.error(str(exc))
     else:
         st.info("No hay operaciones registradas.")
     if income_rows:
@@ -816,7 +1052,26 @@ with tabs[7]:
                      "Retención": fmt_money(e["withholding"], e["currency"]),
                      "Costos": fmt_money(e["fees"], e["currency"]),
                      "Neto": fmt_money(e["net_amount"], e["currency"]),
+                     "TRM del día": ("—" if e["currency"] == "COP" else
+                                     (fmt_number(e["fx_rate"], 2) if e.get("fx_rate") else "Sin TRM (usa la actual)")),
                      "Descripción": e["description"]} for e in income_rows])
+        usd_inc = [e for e in income_rows if e["currency"] == "USD"]
+        if usd_inc:
+            with st.expander("Agregar o corregir la TRM del día de un dividendo en dólares"):
+                fx_iid = st.selectbox("Ingreso en dólares", [e["id"] for e in reversed(usd_inc)], key="fx_inc",
+                                      format_func=lambda i: next(
+                                          f'N.º {e["id"]} · {e["date"]} · {e["asset_name"]} · neto {fmt_money(e["net_amount"], e["currency"])}'
+                                          for e in usd_inc if e["id"] == i))
+                fx_ichosen = next(e for e in usd_inc if e["id"] == fx_iid)
+                fx_inew = st.number_input("TRM de ese día (pesos por dólar)", min_value=0.0,
+                                          value=float(fx_ichosen["fx_rate"] or 0.0) or None, step=1.0, key=f"fx_inew_{fx_iid}")
+                if st.button("Guardar TRM del ingreso", key="fx_inc_save"):
+                    try:
+                        db.update_income_fx(fx_iid, fx_inew or 0)
+                        flash("success", "TRM guardada. Los cálculos en pesos se actualizaron.")
+                        st.rerun()
+                    except ValueError as exc:
+                        st.error(str(exc))
         with st.expander("Corregir retención y costos de un ingreso con el comprobante"):
             iid = st.selectbox("Ingreso", [e["id"] for e in reversed(income_rows)], key="fix_inc",
                                format_func=lambda i: next(

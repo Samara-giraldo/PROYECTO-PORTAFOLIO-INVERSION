@@ -39,6 +39,10 @@ Si PowerShell no deja activar el entorno, ejecuta una vez
 
 **Registrar un CDT, TES o bono** (pestañas *CDT* y *TES y bonos*): abre *Registrar…* y llena capital, tasa, modalidad, fechas y frecuencia de pago. Los intereses que vayas recibiendo se anotan en *Dividendos* (tipo INTERES). Al vencimiento usa *Registrar redención* con el total recibido; así se calcula la ganancia. Si registras el total en la redención, no lo repitas como interés.
 
+**Capital y operaciones** (pestaña nueva): registra tu *capital inicial* (con fecha) y, si pones o sacas dinero después, *aportes* y *retiros*. La app calcula el **efectivo disponible** = capital + aportes − retiros − compras (con comisión) + ventas netas + dividendos netos, y el **patrimonio** = efectivo + valor de tus inversiones. También muestra *cuánto y cuándo invertiste* (una fila por compra), las *ventas realizadas* (cuánto salió neto vs. cuánto costaron esas acciones) y *si vendo hoy* (neto estimado, por acción y resultado). Para TES/bonos puedes guardar el valor de venta de hoy con fuente y fecha; sin ese dato queda *Pendiente*.
+
+**TRM del día**: en compras, ventas y dividendos en dólares puedes anotar la TRM de ese día. Con ella el costo y lo recibido en pesos se calculan como en la hoja del profesor. Si falta, se usa la tasa actual y la app lo marca como aproximado; puedes agregarla después en *Historial*.
+
 ## Precios y ganancias
 
 * **Precio actual.** En *Consultar acciones* puedes consultar Yahoo Finance (`yfinance`) o escribir el precio que ves en Trii. Cada precio guarda **fuente y fecha**. Yahoo entrega el **último cierre diario**, que no es un precio en tiempo real. Muchos símbolos colombianos no existen en Yahoo: en ese caso usa el precio manual.
@@ -70,7 +74,8 @@ No encontré una API pública y documentada de Trii (revisé trii.co/faq y búsq
 
 * Yahoo Finance no es tiempo real y puede no tener tus acciones colombianas. `yfinance` es una librería de terceros no afiliada a Yahoo; revisa sus términos de uso.
 * La tasa de mercado de Yahoo no es la TRM oficial.
-* Las operaciones en USD se convierten con la tasa actual, no con la del día de cada operación (afecta la TIR).
+* Las operaciones en USD usan la TRM del día **si la anotaste**; si no, la tasa actual (se marca como aproximado). La app no descarga la TRM oficial automáticamente.
+* No incluye (aún): TRM automática de la Superfinanciera, UVR/IPC, rentabilidad ponderada en el tiempo por año ni causación diaria de CDT.
 * CDT, TES y bonos se valoran a costo registrado. El interés estimado al vencimiento solo se calcula para tasas efectivas anuales con pago al vencimiento y es bruto de impuestos. No hay precio limpio/sucio, cupones ni intereses corridos.
 * No calcula impuestos, retención en la fuente ni inflación.
 * No hay opción de borrar o editar operaciones (para conservar el historial completo); solo se puede corregir la comisión y, en dividendos, la retención y los costos.
@@ -78,7 +83,11 @@ No encontré una API pública y documentada de Trii (revisé trii.co/faq y búsq
 
 ## Pruebas
 
-`python -m unittest discover -s tests -v` ejecuta las 73 pruebas de cálculos, comisiones, dividendos, formato, migración de la base antigua y apertura de la aplicación.
+`python -m unittest discover -s tests -v` ejecuta las 87 pruebas de cálculos, comisiones, dividendos, formato, migración de la base antigua y apertura de la aplicación.
+
+## Verificación con la hoja del profesor (Nike)
+
+`tests/test_capital_and_professor.py` reproduce `Prueba_portafolio.xlsx`: compra de 20 acciones a US$127 (TRM 4.548,5), dos dividendos de US$0,34 por acción, venta a US$110 (TRM 3.971,38). Resultado de la app = saldo final de la hoja: **−$2.780.414,81** (costo $11.577.451,70; venta neta $8.737.036; dividendos $60.001). Observaciones sobre la hoja: la comisión de venta está en 0, y las fechas de las filas 7 y 8 parecen leídas con día y mes cambiados.
 
 ## Estructura
 

@@ -7,7 +7,7 @@ from pathlib import Path
 
 # Versión del esquema. Cada vez que se agregan columnas o tablas nuevas se sube
 # este número. Se guarda dentro del propio archivo .db (PRAGMA user_version).
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 DEFAULT_DB_PATH = "portfolio_data.db"
 
@@ -175,6 +175,14 @@ class Database:
                 source TEXT NOT NULL,
                 fetched_at TEXT
             );
+            -- --- Tablas nuevas (versión 3): efectivo / capital inicial ---
+            CREATE TABLE IF NOT EXISTS cash_movements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT NOT NULL CHECK(kind IN ('CAPITAL_INICIAL','APORTE','RETIRO')),
+                date TEXT NOT NULL,
+                amount REAL NOT NULL CHECK(amount > 0),
+                notes TEXT DEFAULT ''
+            );
             """)
 
             # --- Columnas nuevas en tablas existentes (solo se agregan) ---
@@ -188,6 +196,9 @@ class Database:
             self._add_column_if_missing(con, "income_events", "fees",
                                         "REAL NOT NULL DEFAULT 0")
             self._add_column_if_missing(con, "price_history", "fetched_at", "TEXT")
+            # TRM (COP por USD) del día de cada operación. Vacía en datos antiguos.
+            self._add_column_if_missing(con, "transactions", "fx_rate", "REAL")
+            self._add_column_if_missing(con, "income_events", "fx_rate", "REAL")
 
             # --- Rellenos seguros de datos antiguos ---
             # Precio sin fecha: se toma la fecha del último registro del historial.
@@ -277,20 +288,22 @@ class Database:
     # ------------------------------------------------------------------
     @staticmethod
     def _insert_transaction(con, asset_id, operation, date, quantity, price, commission,
-                            commission_source="ESTIMADA", notes=""):
+                            commission_source="ESTIMADA", notes="", fx_rate=None):
+        fx_rate = float(fx_rate) if fx_rate else None
         cur = con.execute("""
             INSERT INTO transactions(asset_id,operation,date,quantity,price,commission,
-                                     commission_source,notes)
-            VALUES(?,?,?,?,?,?,?,?)
+                                     commission_source,notes,fx_rate)
+            VALUES(?,?,?,?,?,?,?,?,?)
         """, (int(asset_id), operation, date, float(quantity), float(price),
-              float(commission), commission_source, notes or ""))
+              float(commission), commission_source, notes or "", fx_rate))
         return cur.lastrowid
 
     def add_transaction(self, asset_id, operation, date, quantity, price, commission,
-                        commission_source="ESTIMADA", notes=""):
+                        commission_source="ESTIMADA", notes="", fx_rate=None):
         with self.connect() as con:
             return self._insert_transaction(con, asset_id, operation, date, quantity,
-                                            price, commission, commission_source, notes)
+                                            price, commission, commission_source, notes,
+                                            fx_rate)
 
     def add_asset_and_transaction(self, asset, transaction):
         """Crea una empresa nueva y su primera operación en un solo paso.
@@ -306,8 +319,10 @@ class Database:
 
     def add_fixed_income_investment(self, name, symbol, asset_type, market, capital,
                                     annual_rate, rate_type, opened, maturity, frequency,
-                                    notes="", currency="COP"):
-        """Registra un CDT/TES/bono: activo + condiciones + compra, todo junto."""
+                                    notes="", currency="COP", nominal=None):
+        """Registra un CDT/TES/bono: activo + condiciones + compra, todo junto.
+
+        ``capital`` es lo pagado; ``nominal`` (opcional) es el valor nominal del título."""
         with self.connect() as con:
             asset_id = self._insert_asset(
                 con, name, symbol, asset_type, currency, market, float(capital),
@@ -318,7 +333,7 @@ class Database:
                     payment_frequency,nominal_value,notes
                 ) VALUES(?,?,?,?,?,?,?,?)
             """, (asset_id, annual_rate, rate_type, opened, maturity, frequency,
-                  float(capital), notes))
+                  float(nominal or capital), notes))
             self._insert_transaction(con, asset_id, "COMPRA", opened, 1.0, capital, 0.0,
                                      "SIN_COMISION", "Capital inicial")
             return asset_id
@@ -336,6 +351,17 @@ class Database:
             if cur.rowcount == 0:
                 raise ValueError("No existe esa operación.")
 
+    def update_transaction_fx(self, transaction_id, fx_rate):
+        """Guarda la TRM del día de una operación (para corregir datos antiguos)."""
+        fx_rate = float(fx_rate)
+        if not fx_rate > 0:
+            raise ValueError("La TRM debe ser mayor que cero.")
+        with self.connect() as con:
+            cur = con.execute("UPDATE transactions SET fx_rate=? WHERE id=?",
+                              (fx_rate, int(transaction_id)))
+            if cur.rowcount == 0:
+                raise ValueError("No existe esa operación.")
+
     def get_transactions(self):
         with self.connect() as con:
             return [dict(r) for r in con.execute("""
@@ -348,7 +374,7 @@ class Database:
     # Dividendos e intereses
     # ------------------------------------------------------------------
     def add_income(self, asset_id, event_type, date, amount, description,
-                   withholding=0.0, fees=0.0, allow_duplicate=False):
+                   withholding=0.0, fees=0.0, allow_duplicate=False, fx_rate=None):
         """Registra un dividendo o interés.
 
         ``amount`` es el valor BRUTO. Lo recibido neto es amount - withholding - fees.
@@ -374,10 +400,10 @@ class Database:
                         "No se guardó para no contarlo dos veces.")
             cur = con.execute("""
                 INSERT INTO income_events(asset_id,event_type,date,amount,description,
-                                          withholding,fees)
-                VALUES(?,?,?,?,?,?,?)
+                                          withholding,fees,fx_rate)
+                VALUES(?,?,?,?,?,?,?,?)
             """, (int(asset_id), event_type, date, amount, description or "",
-                  withholding, fees))
+                  withholding, fees, float(fx_rate) if fx_rate else None))
             return cur.lastrowid
 
     def update_income_costs(self, income_id, withholding, fees):
@@ -394,6 +420,39 @@ class Database:
                 raise ValueError("La retención y los costos no pueden superar el valor bruto.")
             con.execute("UPDATE income_events SET withholding=?, fees=? WHERE id=?",
                         (withholding, fees, int(income_id)))
+
+    def update_income_fx(self, income_id, fx_rate):
+        fx_rate = float(fx_rate)
+        if not fx_rate > 0:
+            raise ValueError("La TRM debe ser mayor que cero.")
+        with self.connect() as con:
+            cur = con.execute("UPDATE income_events SET fx_rate=? WHERE id=?",
+                              (fx_rate, int(income_id)))
+            if cur.rowcount == 0:
+                raise ValueError("No existe ese ingreso.")
+
+    # ------------------------------------------------------------------
+    # Capital inicial, aportes y retiros (efectivo)
+    # ------------------------------------------------------------------
+    def add_cash_movement(self, kind, date, amount, notes=""):
+        """kind: CAPITAL_INICIAL, APORTE o RETIRO. Valores en COP. Solo hay un capital inicial."""
+        amount = float(amount)
+        if kind not in ("CAPITAL_INICIAL", "APORTE", "RETIRO"):
+            raise ValueError("Tipo de movimiento no válido.")
+        if not amount > 0:
+            raise ValueError("El valor debe ser mayor que cero.")
+        with self.connect() as con:
+            if kind == "CAPITAL_INICIAL" and con.execute(
+                    "SELECT 1 FROM cash_movements WHERE kind='CAPITAL_INICIAL'").fetchone():
+                raise ValueError("Ya registraste el capital inicial. Usa un aporte para sumar más dinero.")
+            return con.execute(
+                "INSERT INTO cash_movements(kind,date,amount,notes) VALUES(?,?,?,?)",
+                (kind, date, amount, notes or "")).lastrowid
+
+    def get_cash_movements(self):
+        with self.connect() as con:
+            return [dict(r) for r in con.execute(
+                "SELECT * FROM cash_movements ORDER BY date, id")]
 
     def get_income_events(self):
         with self.connect() as con:

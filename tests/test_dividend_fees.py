@@ -88,9 +88,9 @@ class DividendFlowInAppTest(unittest.TestCase):
         at = AppTest.from_file(APP, default_timeout=60)
         at.run()
         self.assertFalse(at.exception)
-        gross = [w for w in at.tabs[5].number_input if w.label.startswith("Valor bruto")][0]
+        gross = [w for w in at.tabs[6].number_input if w.label.startswith("Valor bruto")][0]
         gross.set_value(100000.0)   # en un formulario, valor y clic van en la misma ejecución
-        [b for b in at.tabs[5].button if b.label == "Registrar ingreso"][0].click().run()
+        [b for b in at.tabs[6].button if b.label == "Registrar ingreso"][0].click().run()
         self.assertFalse(at.exception, [e.value for e in at.exception])
         events = Database(self.path).get_income_events()
         self.assertEqual(len(events), 1)
@@ -98,8 +98,8 @@ class DividendFlowInAppTest(unittest.TestCase):
         self.assertIn("estimado", events[0]["description"])
         # Registrarlo otra vez con los mismos datos NO debe duplicarlo
         at.run()
-        [w for w in at.tabs[5].number_input if w.label.startswith("Valor bruto")][0].set_value(100000.0)
-        [b for b in at.tabs[5].button if b.label == "Registrar ingreso"][0].click().run()
+        [w for w in at.tabs[6].number_input if w.label.startswith("Valor bruto")][0].set_value(100000.0)
+        [b for b in at.tabs[6].button if b.label == "Registrar ingreso"][0].click().run()
         self.assertTrue([e for e in at.error if "no se guardó" in e.value.lower()])
         self.assertEqual(len(Database(self.path).get_income_events()), 1)
 
